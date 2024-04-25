@@ -112,7 +112,6 @@ def train(dataset, models, training_pipeline, logging, cfg):
 
     print("--- Finished training ---\n")
 
-
 def validation(dataset, models, training_pipeline, logging, cfg):
     # Unpack
     valloader = dataset['valloader']

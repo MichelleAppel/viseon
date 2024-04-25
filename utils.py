@@ -16,8 +16,6 @@ import yaml
 import pickle
 
 
-
-
 # Dilation is used for the reg-loss on the phosphene image: phosphenes do not have to map 1 on 1, small offset is allowed.
 def dilation5x5(img, kernel=None):
     if kernel is None:

@@ -298,7 +298,6 @@ class ADE_Dataset(Dataset):
     
         return x.detach().to(self.device),t.detach().to(self.device)
     
-    
 class Character_Dataset(Dataset):
     """ Pytorch dataset containing images of single (synthetic) characters.
     __getitem__ returns an image containing one of 26 ascci lowercase characters, 

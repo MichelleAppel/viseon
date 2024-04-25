@@ -141,7 +141,6 @@ class VGGFeatureExtractor():
         return activations
         
         
-
 class E2E_Encoder(nn.Module):
     """
     Simple non-generic encoder class that receives 128x128 input and outputs 32x32 feature map as stimulation protocol

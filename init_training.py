@@ -21,7 +21,6 @@ import matplotlib.pyplot as plt
 
 from torch.utils.tensorboard import SummaryWriter
 
-
 class LossTerm():
     """Loss term that can be used for the compound loss"""
 

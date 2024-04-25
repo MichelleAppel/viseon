@@ -35,7 +35,7 @@ training_pipeline:
     regularization_weight: 0.99999  # relative weight for enforcing interpretable (supervised) phosphene encodings
     
 dataset:
-    dataset: ADE20K
+    dataset: ADE20K # choose from ADE20K, BouncingMNIST
     target: 'boundary' # choose from 'segmentation', 'boundary'
     data_directory : C:/Users/appel/Documents/Project/Dynaphos/data/michelle123_5658b6fb/ADE20K/
     load_preprocessed: True # for the ADE50k dataset:
