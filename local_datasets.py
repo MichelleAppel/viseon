@@ -19,11 +19,17 @@ def get_ade20k_dataset(cfg):
     trainset = ADE_Dataset(device=cfg['device'],
                                           directory=cfg['data_directory'],
                                           imsize=(128, 128),
-                                          load_preprocessed=cfg['load_preprocessed'])
+                                          load_preprocessed=cfg['load_preprocessed'],
+                                          grayscale=cfg['in_channels']==1,
+                                          contour_labels=cfg['target']=='boundary',
+                                          debug_subset=cfg['debug_subset'])
     valset = ADE_Dataset(device=cfg['device'], directory=cfg['data_directory'],
                                         imsize=(128, 128),
                                         load_preprocessed=cfg['load_preprocessed'],
-                                        validation=True)
+                                        grayscale=cfg['in_channels']==1,
+                                        contour_labels=cfg['target']=='boundary',
+                                        validation=True,
+                                        debug_subset=cfg['debug_subset'])
     return trainset, valset
 
 def get_bouncing_mnist_dataset(cfg):
@@ -67,7 +73,7 @@ def create_circular_mask(h, w, center=None, radius=None, circular_mask=True):
         radius = min(center[0], center[1], w-center[0], h-center[1])
 
     x = torch.arange(h)
-    Y, X = torch.meshgrid(x,x)
+    Y, X = torch.meshgrid(x,x, indexing='ij')
     dist_from_center = torch.sqrt((X - center[0])**2 + (Y-center[1])**2)
 
     mask = dist_from_center <= radius
@@ -142,34 +148,44 @@ class ADE_Dataset(Dataset):
     
     def __init__(self, directory='../_Datasets/ADE20K/',
                  device=torch.device('cuda:0'),
-                 imsize = (128,128),
-                 grayscale = True,
+                 imsize = (256,256),
+                 grayscale = False,
                  normalize = True,
-                 contour_labels = True,
+                 contour_labels = False,
                  validation=False,
                  load_preprocessed=False,
-                 circular_mask=True):
+                 circular_mask=True,
+                 debug_subset=False):
         
         self.validation = validation
         self.contour_labels = contour_labels
         self.normalize = normalize
         self.grayscale = grayscale
         self.device = device
+        self.debug_subset = debug_subset
     
-        contour = lambda im: im.filter(ImageFilter.FIND_EDGES).point(lambda p: p > 1 and 255) if self.contour_labels else im
-        # to_grayscale = lambda im: im.convert('L') if self.grayscale else im
-
         # Image and target tranformations (square crop and resize)
         self.img_transform = T.Compose([T.Lambda(lambda img:F.center_crop(img, min(img.size))),
                                         T.Resize(imsize),
                                         T.ToTensor()
                                         ])
-        self.trg_transform = T.Compose([T.Lambda(lambda img:F.center_crop(img, min(img.size))),
-                                        T.Resize(imsize,interpolation=T.InterpolationMode.NEAREST), # Nearest Neighbour
-                                        T.Lambda(contour),
-                                        T.ToTensor()
+
+        if self.contour_labels:
+            # Transformation for target with contour detection
+            contour = lambda im: im.filter(ImageFilter.FIND_EDGES).point(lambda p: p > 1 and 255) if self.contour_labels else im
+            self.trg_transform = T.Compose([T.Lambda(lambda img:F.center_crop(img, min(img.size))),
+                                            T.Resize(imsize,interpolation=T.InterpolationMode.NEAREST), # Nearest Neighbour
+                                            T.Lambda(contour),
+                                            T.ToTensor()
+                                            ])
+        else:
+            # Transformation for target with semantic labels
+            self.trg_transform = T.Compose([
+                                            T.Lambda(lambda img: F.center_crop(img, min(img.size))),
+                                            T.Resize(imsize, interpolation=T.InterpolationMode.NEAREST), # Nearest Neighbour is typically used for segmentation labels to avoid interpolation artifacts
+                                            T.Lambda(lambda img: torch.from_numpy(np.array(img)).long()) # For masks
                                         ])
-        
+
         # Normalize
         self.normalizer = T.Normalize(mean = [0.485, 0.456, 0.406],
                                       std = [0.229, 0.224, 0.225])        
@@ -197,16 +213,24 @@ class ADE_Dataset(Dataset):
             # Collect files 
             img_files, seg_files = [],[]
             print('----Listing training images----')
-            for path, subdirs, files in tqdm(os.walk(os.path.join(directory,'images','training'))):
+            i = 0
+            for path, subdirs, files in tqdm(os.walk(os.path.join(directory,'images','ADE','training'))):
             # for path, subdirs, files in os.walk(os.path.join(directory,'training')):
                 img_files+= glob(os.path.join(path,'*.jpg'))
                 seg_files+= glob(os.path.join(path,'*seg.png'))
-                val_img_files, val_seg_files, = [],[]
+                i+=1
+                if self.debug_subset and i>=self.debug_subset:
+                    break
+            val_img_files, val_seg_files, = [],[]
             print('----Listing validation images----')
-            for path, subdirs, files in tqdm(os.walk(os.path.join(directory,'images','validation'))):
+            i=0
+            for path, subdirs, files in tqdm(os.walk(os.path.join(directory,'images','ADE','validation'))):
             # for path, subdirs, files in os.walk(os.path.join(directory,'validation')):
                 val_img_files+= glob(os.path.join(path,'*.jpg'))
                 val_seg_files+= glob(os.path.join(path,'*seg.png'))
+                i+=1
+                if self.debug_subset and i>=self.debug_subset:
+                    break
             for l in [img_files,seg_files,val_img_files,val_seg_files]:
                 l.sort()
 
@@ -242,7 +266,7 @@ class ADE_Dataset(Dataset):
     def save(self,directory):
         
         # Make directory if it doesn't exist
-        path = os.path.join(directory, 'processed')
+        path = os.path.join(directory, 'processed_'+('contour' if self.contour_labels else 'semantic'))
         if not os.path.exists(path):
             os.makedirs(path)
         
@@ -255,9 +279,9 @@ class ADE_Dataset(Dataset):
 
     def load(self,directory):
         mode = '_val' if self.validation else '_train'
-        with open(os.path.join(directory,'processed',f'standardized_processed{mode}_inputs.pkl'),'rb') as f:
+        with open(os.path.join(directory,'processed_'+('contour' if self.contour_labels else 'semantic'),f'standardized_processed{mode}_inputs.pkl'),'rb') as f:
             self.inputs = pickle.load(f)
-        with open(os.path.join(directory,'processed',f'standardized_processed{mode}_targets.pkl'),'rb') as f:
+        with open(os.path.join(directory,'processed_'+('contour' if self.contour_labels else 'semantic'),f'standardized_processed{mode}_targets.pkl'),'rb') as f:
             self.targets = pickle.load(f)
 
     def __len__(self):

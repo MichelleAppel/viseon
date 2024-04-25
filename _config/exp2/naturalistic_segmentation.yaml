@@ -1,13 +1,13 @@
 Description:
-    model_name: exp2_unconstrained_april24
+    model_name: exp2_segmentation_23042024
 
 general: 
     use_deterministic_algorithms: False
-    batch_size: 2
+    batch_size: 4
     device: 'cuda:0' 
     gpu : 0
-    save_path : ./out/example_naturalistic_unconstrained2
-    save_output: [input_resized, stimulation, phosphenes, reconstruction]
+    save_path : ./out/example_naturalistic_segmentation
+    save_output: [input, stimulation, phosphenes, reconstruction_rgb, label_rgb]
     
 simulator:
     base_config: ./_config/exp2/simulator_config.yaml
@@ -15,12 +15,12 @@ simulator:
     
 e2e_models:
     model_architecture: end-to-end-autoencoder # choose from end-to-end-autoencoder, zhao-autoencoder
-    in_channels: 1
+    in_channels: 3
     n_electrodes: 1000
     output_scaling: 128.0e-6
-    output_steps: None # unconstrained output
-    out_channels: 1
-    encoder_out_activation: relu
+    output_steps: 10 # output is constrained to 10 possible steps in the range [0, output_scaling]
+    out_channels: 250
+    encoder_out_activation: sigmoid
     decoder_out_activation: sigmoid
 
 optimization:
@@ -31,21 +31,15 @@ optimization:
     early_stop_criterium : 15
 
 training_pipeline:
-    pipeline: unconstrained-image-autoencoder
-    regularization_weight: 0.5  # relative weight for enforcing interpretable (supervised) phosphene encodings
+    pipeline: supervised-segmentation-reconstruction
+    regularization_weight: 0.99999  # relative weight for enforcing interpretable (supervised) phosphene encodings
     
-
 dataset:
     dataset: ADE20K
+    target: 'segmentation' # choose from 'segmentation', 'boundary'
+    num_classes: 250
     data_directory : C:/Users/appel/Documents/Project/Dynaphos/data/michelle123_5658b6fb/ADE20K/
-    load_preprocessed: True # for the ADE50k dataset:
+    debug_subset: 1024 # for the ADE50k dataset:
+    load_preprocessed: False # for the ADE50k dataset:
     sequence_length: 5 # for the BouncingMNIST dataset:
     mode: recon # for the BouncingMNIST dataset:
-    
-    
-
-
-    
-    
-
-

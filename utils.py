@@ -53,6 +53,28 @@ def load_config(yaml_file):
         raw_content = yaml.load(file,Loader=yaml.FullLoader) # nested dictionary
     return {k:v for params in raw_content.values() for k,v in params.items()} # unpacked
 
+def tensor_to_rgb(tensor, num_classes):
+    """Convert a semantic label tensor to an RGB image.
+    
+    Args:
+        tensor: torch.Tensor with shape (Batch, 1, Height, Width)
+        num_classes: int, number of classes in the label tensor
+
+    Returns:
+        rgb: torch.Tensor with shape (Batch, 3, Height, Width)
+    """
+    color_map = plt.cm.get_cmap('tab20', num_classes)
+    color_map = color_map.colors
+    color_map = np.array(color_map)
+    color_map = color_map.astype(np.float32)
+    color_map = torch.tensor(color_map, dtype=torch.float32)[:, :3]
+    color_map[0] = 0 # set background to black
+
+    tensor = tensor.cpu().clone().detach().numpy()
+    rgb = color_map[tensor]
+    # Normalize RGB values to [0, 1] and convert back to Torch tensor
+    rgb = rgb.permute(0, 3, 1, 2)  # Reorder dimensions to (Batch, Channel, Height, Width)
+    return rgb
 
 class CustomSummaryTracker():
     """Helper for saving training history, model output, loss, etc.."""
@@ -150,3 +172,4 @@ class RGBConverter(object):
         image = torch.stack([self.weights[c]*image[:,c,:,:] for c in range(3)], dim=1)
         image = torch.sum(image,dim=1,keepdim=True)
         return image
+

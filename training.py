@@ -34,7 +34,7 @@ def train(dataset, models, training_pipeline, logging, cfg):
     best_validation_performance = np.inf
     not_improved_count = 0
     epoch = 0
-    while epoch <= cfg['epochs'] and not_improved_count < cfg['early_stop_criterium']:
+    while epoch <= (cfg['epochs'] - 1) and not_improved_count < cfg['early_stop_criterium']:
         print(f'\nepoch {epoch}')
 
         training_loss.reset()
@@ -85,7 +85,7 @@ def train(dataset, models, training_pipeline, logging, cfg):
                     elif len(shape) == 2: # (N, P)
                         tb_writer.add_histogram(key, model_output[key]) # Stimulation
 
-            if batch_idx % (len(trainloader) // cfg['validations_per_epoch']) == 0:
+            if batch_idx % (len(trainloader) // cfg['validations_per_epoch'] + 1) == 0:
                 # Run validation loop
                 validation_performance = validation(dataset, models, training_pipeline, logging, cfg)
 
@@ -187,11 +187,13 @@ def get_validation_results(dataset, models, training_pipeline, cfg):
 
 def save_validation_results(output, performance, cfg):
     path = os.path.join(cfg['save_path'], 'validation_results')
+    if not os.path.exists(path):
+        os.makedirs(path)
     print(f'Saving validation results to {path}')
     if output is not None:
         output = {k: torch.cat(v) for k, v in output.get().items()}  # concatenate batches
         save_pickle(output, path)
-    performance.to_csv(os.path.join(path, 'validation_performance.csv'))
+    performance.to_csv(os.path.normpath(os.path.join(path, 'validation_performance.csv')))
     performance.describe().to_csv(os.path.join(path, 'performance_summary.csv'))
 
 def save_output_history(logging, cfg):
