@@ -148,7 +148,7 @@ class ADE_Dataset(Dataset):
     
     def __init__(self, directory='../_Datasets/ADE20K/',
                  device=torch.device('cuda:0'),
-                 imsize = (256,256),
+                 imsize = (128,128),
                  grayscale = False,
                  normalize = True,
                  contour_labels = False,

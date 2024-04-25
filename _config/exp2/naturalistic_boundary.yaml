@@ -1,5 +1,5 @@
 Description:
-    model_name: exp2_boundary_nov30
+    model_name: exp2_boundary_april25
 
 general: 
     use_deterministic_algorithms: False
@@ -18,13 +18,13 @@ e2e_models:
     in_channels: 1
     n_electrodes: 1000
     output_scaling: 128.0e-6
-    output_steps: None # output is constrained to 10 possible steps in the range [0, output_scaling]
+    output_steps: 10 # output is constrained to 10 possible steps in the range [0, output_scaling]
     out_channels: 1
     encoder_out_activation: sigmoid
     decoder_out_activation: sigmoid
 
 optimization:
-    learning_rate : 0.0005
+    learning_rate : 0.00025
     epochs : 16
     trainstats_per_epoch : 24
     validations_per_epoch: 8
