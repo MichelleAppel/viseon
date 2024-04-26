@@ -34,7 +34,7 @@ def train(dataset, models, training_pipeline, logging, cfg):
     best_validation_performance = np.inf
     not_improved_count = 0
     epoch = 0
-    while epoch <= (cfg['epochs'] - 1) and not_improved_count < cfg['early_stop_criterium']:
+    while epoch <= cfg['epochs'] and not_improved_count < cfg['early_stop_criterium']:
         print(f'\nepoch {epoch}')
 
         training_loss.reset()

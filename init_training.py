@@ -102,12 +102,12 @@ def get_dataset(cfg):
         trainset, valset = local_datasets.get_character_dataset(cfg)
         
     # Subset for debugging: Use only the first 100 samples from each dataset
-    num_samples_debug = 100  # Define how many samples you want to use for debugging
-    debug_trainset = Subset(trainset, indices=range(min(num_samples_debug, len(trainset))))
-    debug_valset = Subset(valset, indices=range(min(num_samples_debug, len(valset))))
+    # num_samples_debug = 100  # Define how many samples you want to use for debugging
+    # debug_trainset = Subset(trainset, indices=range(min(num_samples_debug, len(trainset))))
+    # debug_valset = Subset(valset, indices=range(min(num_samples_debug, len(valset))))
 
-    trainloader = DataLoader(debug_trainset, batch_size=cfg['batch_size'],shuffle=True, drop_last=True)
-    valloader = DataLoader(debug_valset,batch_size=cfg['batch_size'],shuffle=False, drop_last=True)
+    trainloader = DataLoader(trainset, batch_size=cfg['batch_size'],shuffle=True, drop_last=True)
+    valloader = DataLoader(valset,batch_size=cfg['batch_size'],shuffle=False, drop_last=True)
     example_batch = next(iter(valloader))
     cfg['circular_mask'] = trainset._mask.to(cfg['device'])
 

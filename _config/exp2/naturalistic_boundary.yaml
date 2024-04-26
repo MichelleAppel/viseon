@@ -28,7 +28,7 @@ optimization:
     epochs : 32
     trainstats_per_epoch : 24
     validations_per_epoch: 8
-    early_stop_criterium : 9999999
+    early_stop_criterium : 15
 
 training_pipeline:
     pipeline: supervised-boundary-reconstruction
