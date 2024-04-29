@@ -1,9 +1,9 @@
 Description:
-    model_name: exp2_segmentation_23042024
+    model_name: exp2_segmentation_290420241
 
 general: 
     use_deterministic_algorithms: False
-    batch_size: 4
+    batch_size: 1
     device: 'cuda:0' 
     gpu : 0
     save_path : ./out/example_naturalistic_segmentation
@@ -24,7 +24,7 @@ e2e_models:
     decoder_out_activation: sigmoid
 
 optimization:
-    learning_rate : 0.0005
+    learning_rate : 0.0003535
     epochs : 16
     trainstats_per_epoch : 24
     validations_per_epoch: 8
@@ -39,7 +39,7 @@ dataset:
     target: 'segmentation' # choose from 'segmentation', 'boundary'
     num_classes: 250
     data_directory : C:/Users/appel/Documents/Project/Dynaphos/data/michelle123_5658b6fb/ADE20K/
-    debug_subset: 1024 # for the ADE50k dataset:
-    load_preprocessed: False # for the ADE50k dataset:
-    sequence_length: 5 # for the BouncingMNIST dataset:
-    mode: recon # for the BouncingMNIST dataset:
+    debug_subset: False # for the ADE50k dataset:
+    load_preprocessed: True # for the ADE50k dataset:
+    # sequence_length: 5 # for the BouncingMNIST dataset:
+    # mode: recon # for the BouncingMNIST dataset:

@@ -69,7 +69,7 @@ def tensor_to_rgb(tensor, num_classes):
     color_map[0] = 0 # set background to black
 
     tensor = tensor.cpu().clone().detach().numpy()
-    rgb = color_map[tensor]
+    rgb = color_map[tensor, :].squeeze(1)
     # Normalize RGB values to [0, 1] and convert back to Torch tensor
     rgb = rgb.permute(0, 3, 1, 2)  # Reorder dimensions to (Batch, Channel, Height, Width)
     return rgb

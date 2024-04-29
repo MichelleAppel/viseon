@@ -25,7 +25,7 @@ e2e_models:
 
 optimization:
     learning_rate : 0.0003535
-    epochs : 32
+    epochs : 16
     trainstats_per_epoch : 24
     validations_per_epoch: 8
     early_stop_criterium : 15
@@ -42,12 +42,3 @@ dataset:
     debug_subset: False # for the ADE50k dataset:
     sequence_length: 5 # for the BouncingMNIST dataset:
     mode: recon # for the BouncingMNIST dataset:
-
-    
-    
-
-
-    
-    
-
-

@@ -357,6 +357,8 @@ def get_pipeline_supervised_segmentation_reconstruction(cfg):
         phosphenes = simulator(stimulation).unsqueeze(1)
         reconstruction = decoder(phosphenes) * cfg['circular_mask']
         reconstruction_rgb = tensor_to_rgb(torch.nn.functional.softmax(reconstruction.detach(), dim=1).argmax(1, keepdims=True), cfg['num_classes'])
+        # dummy
+        # reconstruction_rgb = torch.zeros_like(label_rgb)
 
         # Output dictionary
         out = {'input': image,
@@ -380,7 +382,7 @@ def get_pipeline_supervised_segmentation_reconstruction(cfg):
     segmen_loss = LossTerm(name='segmentation_loss',
                           func=F.cross_entropy,
                           arg_names=('reconstruction', 'target'),
-                          weight=1 - cfg['regularization_weight'])
+                          weight=1) # weight=1 - cfg['regularization_weight'])
 
     # regul_loss = LossTerm(name='regularization_loss',
     #                       func=torch.nn.MSELoss(),
