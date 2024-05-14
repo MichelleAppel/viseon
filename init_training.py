@@ -19,7 +19,7 @@ import torch.nn.functional as F
 
 import matplotlib.pyplot as plt
 
-from torch.utils.tensorboard import SummaryWriter
+import wandb
 
 class LossTerm():
     """Loss term that can be used for the compound loss"""
@@ -82,7 +82,7 @@ class RunningLoss():
 
 class L1FeatureLoss(object):
     def __init__(self):
-        self.feature_extractor = model.VGGFeatureExtractor(device=device)
+        self.feature_extractor = model.VGGFeatureExtractor(device=torch.device)
         self.loss_fn = torch.nn.functional.l1_loss
 
     def __call__(self, y_pred, y_true, ):
@@ -100,16 +100,18 @@ def get_dataset(cfg):
         trainset, valset = local_datasets.get_bouncing_mnist_dataset(cfg)
     elif cfg['dataset'] == 'Characters':
         trainset, valset = local_datasets.get_character_dataset(cfg)
+    
+    cfg['circular_mask'] = trainset._mask.to(cfg['device'])
         
-    # Subset for debugging: Use only the first 100 samples from each dataset
-    # num_samples_debug = 100  # Define how many samples you want to use for debugging
-    # debug_trainset = Subset(trainset, indices=range(min(num_samples_debug, len(trainset))))
-    # debug_valset = Subset(valset, indices=range(min(num_samples_debug, len(valset))))
+    if cfg['debug_subset']:
+        # Subset for debugging: Use only the first 100 samples from each dataset
+        num_samples_debug = cfg['debug_subset']  # Define how many samples you want to use for debugging
+        trainset = Subset(trainset, indices=range(min(num_samples_debug, len(trainset))))
+        valset = Subset(valset, indices=range(min(num_samples_debug, len(valset))))
 
     trainloader = DataLoader(trainset, batch_size=cfg['batch_size'],shuffle=True, drop_last=True)
-    valloader = DataLoader(valset,batch_size=cfg['batch_size'],shuffle=False, drop_last=True)
+    valloader = DataLoader(valset, batch_size=cfg['batch_size'],shuffle=False, drop_last=True)
     example_batch = next(iter(valloader))
-    cfg['circular_mask'] = trainset._mask.to(cfg['device'])
 
     dataset = {'trainset': trainset,
                'valset': valset,
@@ -123,6 +125,9 @@ def get_dataset(cfg):
 def get_models(cfg):
     if cfg['model_architecture'] == 'end-to-end-autoencoder':
         encoder, decoder = model.get_e2e_autoencoder(cfg)
+        optimizer = torch.optim.Adam([*encoder.parameters(), *decoder.parameters()], lr=cfg['learning_rate'])
+    elif cfg['model_architecture'] == 'end-to-end-autoencoder-nophosphenes':
+        encoder, decoder = model.get_e2e_autoencoder_nophosphenes(cfg)
         optimizer = torch.optim.Adam([*encoder.parameters(), *decoder.parameters()], lr=cfg['learning_rate'])
     elif cfg['model_architecture'] == 'zhao-autoencoder':
         encoder, decoder = model.get_Zhao_autoencoder(cfg)
@@ -162,9 +167,11 @@ def get_simulator(cfg):
 
 def get_logging(cfg):
     out = dict()
+        
+    wandb.init(project=cfg['project_name'], entity=cfg['entity'], name=cfg['run_name'], config=cfg)
+    out['logger'] = wandb
     out['training_loss'] = RunningLoss()
     out['validation_loss'] = RunningLoss()
-    out['tensorboard_writer'] = SummaryWriter(os.path.join(cfg['save_path'], 'tensorboard/'))
     out['training_summary'] = CustomSummaryTracker()
     out['validation_summary'] = CustomSummaryTracker()
     out['example_output'] = CustomSummaryTracker()
@@ -179,8 +186,12 @@ def get_training_pipeline(cfg):
         forward, lossfunc = get_pipeline_constrained_image_autoencoder(cfg)
     elif cfg['pipeline'] == 'supervised-boundary-reconstruction':
         forward, lossfunc = get_pipeline_supervised_boundary_reconstruction(cfg)
-    elif cfg['pipeline'] == 'supervised-segmentation-reconstruction':
+    elif cfg['pipeline'] == 'supervised-boundary-no-phosphenes':
+        forward, lossfunc = get_pipeline_supervised_boundary_reconstruction_no_phosphenes(cfg)
+    elif cfg['pipeline'] == 'supervised-segmentation':
         forward, lossfunc = get_pipeline_supervised_segmentation_reconstruction(cfg)
+    elif cfg['pipeline'] == 'supervised-segmentation-no-phosphenes':
+        forward, lossfunc = get_pipeline_supervised_segmentation_no_phosphenes(cfg)
     elif cfg['pipeline'] == 'unconstrained-video-reconstruction':
         forward, lossfunc = get_pipeline_unconstrained_video_reconstruction(cfg)
     elif cfg['pipeline'] == 'image-autoencoder-interaction-model':
@@ -337,6 +348,57 @@ def get_pipeline_supervised_boundary_reconstruction(cfg):
 
     return forward, loss_func
 
+def get_pipeline_supervised_boundary_reconstruction_no_phosphenes(cfg):
+    def forward(batch, models, cfg, to_cpu=False):
+        """Forward pass of the model."""
+
+        # unpack
+        encoder = models['encoder']
+        decoder = models['decoder']
+        simulator = models['simulator']
+
+        # Data manipulation
+        image, label = batch
+        label = dilation3x3(label)
+
+        # Forward pass
+        simulator.reset()
+        latent = encoder(image)
+        # phosphenes = simulator(stimulation).unsqueeze(1)
+        reconstruction = decoder(latent) * cfg['circular_mask']
+
+        # Output dictionary
+        out = {'input': image,
+            #    'stimulation': stimulation,
+            #    'phosphenes': phosphenes,
+                'latent': latent,
+               'reconstruction': reconstruction * cfg['circular_mask'],
+               'target': label * cfg['circular_mask'],
+               'target_resized': resize(label * cfg['circular_mask'], cfg['SPVsize'],),}
+
+        # Sample phosphenes and target at the centers of the phosphenes
+        # out.update({'phosphene_centers': simulator.sample_centers(phosphenes) ,
+        #             'target_centers': simulator.sample_centers(out['target_resized']) })
+
+        if to_cpu:
+            # Return a cpu-copy of the model output
+            out = {k: v.detach().cpu().clone() for k, v in out.items()}
+        return out
+
+    recon_loss = LossTerm(name='reconstruction_loss',
+                          func=torch.nn.MSELoss(),
+                          arg_names=('reconstruction', 'target'),
+                          weight=1 - cfg['regularization_weight'])
+
+    # regul_loss = LossTerm(name='regularization_loss',
+    #                       func=torch.nn.MSELoss(),
+    #                       arg_names=('phosphene_centers', 'target_centers'),
+    #                       weight=cfg['regularization_weight'])
+
+    loss_func = CompoundLoss([recon_loss])
+
+    return forward, loss_func
+
 
 def get_pipeline_supervised_segmentation_reconstruction(cfg):
     def forward(batch, models, cfg, to_cpu=False):
@@ -357,13 +419,64 @@ def get_pipeline_supervised_segmentation_reconstruction(cfg):
         phosphenes = simulator(stimulation).unsqueeze(1)
         reconstruction = decoder(phosphenes) * cfg['circular_mask']
         reconstruction_rgb = tensor_to_rgb(torch.nn.functional.softmax(reconstruction.detach(), dim=1).argmax(1, keepdims=True), cfg['num_classes'])
-        # dummy
-        # reconstruction_rgb = torch.zeros_like(label_rgb)
 
         # Output dictionary
         out = {'input': image,
                'stimulation': stimulation,
                'phosphenes': phosphenes,
+               'reconstruction': reconstruction * cfg['circular_mask'],
+               'target': (label * cfg['circular_mask']).squeeze(1),
+               'target_resized': resize(label.float() * cfg['circular_mask'], cfg['SPVsize'],),
+               'label_rgb': label_rgb,
+               'reconstruction_rgb': reconstruction_rgb}
+
+        # # Sample phosphenes and target at the centers of the phosphenes
+        # out.update({'phosphene_centers': simulator.sample_centers(phosphenes),
+        #             'target_centers': simulator.sample_centers(out['target_resized']) })
+
+        if to_cpu:
+            # Return a cpu-copy of the model output
+            out = {k: v.detach().cpu().clone() for k, v in out.items()}
+        return out
+
+    segmen_loss = LossTerm(name='segmentation_loss',
+                          func=F.cross_entropy,
+                          arg_names=('reconstruction', 'target'),
+                          weight=1) # weight=1 - cfg['regularization_weight'])
+
+    # regul_loss = LossTerm(name='regularization_loss',
+    #                       func=torch.nn.MSELoss(),
+    #                       arg_names=('phosphene_centers', 'target_centers'),
+    #                       weight=cfg['regularization_weight'])
+
+    loss_func = CompoundLoss([segmen_loss]) #, regul_loss])
+
+    return forward, loss_func
+
+def get_pipeline_supervised_segmentation_no_phosphenes(cfg):
+    def forward(batch, models, cfg, to_cpu=False):
+        """Forward pass of the model."""
+
+        # unpack
+        encoder = models['encoder']
+        decoder = models['decoder']
+        simulator = models['simulator']
+
+        # Data manipulation
+        image, label = batch
+        label_rgb = tensor_to_rgb(label, cfg['num_classes'])
+
+        # Forward pass
+        simulator.reset()
+        latent = encoder(image)
+        # phosphenes = simulator(stimulation).unsqueeze(1)
+        reconstruction = decoder(latent) * cfg['circular_mask']
+        reconstruction_rgb = tensor_to_rgb(torch.nn.functional.softmax(reconstruction.detach(), dim=1).argmax(1, keepdims=True), cfg['num_classes'])
+
+        # Output dictionary
+        out = {'input': image,
+            #    'stimulation': stimulation,
+               'latent': latent,
                'reconstruction': reconstruction * cfg['circular_mask'],
                'target': (label * cfg['circular_mask']).squeeze(1),
                'target_resized': resize(label.float() * cfg['circular_mask'], cfg['SPVsize'],),

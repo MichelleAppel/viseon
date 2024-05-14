@@ -25,6 +25,26 @@ def get_e2e_autoencoder(cfg):
                                                   out_scaling=cfg['output_scaling'])).to(cfg['device'])
     return encoder, decoder
 
+def get_e2e_autoencoder_nophosphenes(cfg):
+
+    # initialize encoder and decoder
+    encoder = E2E_Encoder_nophosphenes(in_channels=cfg['in_channels'],
+                          out_scaling=cfg['output_scaling'],
+                          out_activation=cfg['encoder_out_activation']).to(cfg['device'])
+
+    decoder = E2E_Decoder(out_channels=cfg['out_channels'],
+                          out_activation=cfg['decoder_out_activation']).to(cfg['device'])
+    
+    # If output steps are specified, add safety layer at the end of the encoder model 
+    if cfg['output_steps'] != 'None':
+        assert cfg['encoder_out_activation'] == 'sigmoid'
+        encoder.output_scaling = 1.0
+        encoder = torch.nn.Sequential(encoder,
+                                      SafetyLayer(n_steps=10,
+                                                  order=2,
+                                                  out_scaling=cfg['output_scaling'])).to(cfg['device'])
+    return encoder, decoder
+
 def get_Zhao_autoencoder(cfg):
     encoder = ZhaoEncoder(in_channels=cfg['in_channels'], n_electrodes=cfg['n_electrodes']).to(cfg['device'])
     decoder = ZhaoDecoder(out_channels=cfg['out_channels'], out_activation=cfg['decoder_out_activation']).to(cfg['device'])
@@ -172,6 +192,40 @@ class E2E_Encoder(nn.Module):
         stimulation = self.out*self.output_scaling #scaling improves numerical stability
         return stimulation
 
+class E2E_Encoder_nophosphenes(nn.Module):
+    """
+    Simple non-generic encoder class that receives 128x128 input and outputs 256x256 feature map.
+    """
+    def __init__(self, in_channels=3, out_channels=1, out_scaling=1e-4, out_activation='relu'):
+        super(E2E_Encoder_nophosphenes, self).__init__()
+        self.output_scaling = out_scaling
+        self.out_activation = {'tanh': nn.Tanh(),
+                               'sigmoid': nn.Sigmoid(),
+                               'relu': nn.ReLU(),
+                               'softmax': nn.Softmax(dim=1)}[out_activation]
+
+        # Model
+        self.model = nn.Sequential(
+            *convlayer(in_channels, 8, 3, 1, 1),
+            *convlayer(8, 16, 3, 1, 1, resample_out=nn.MaxPool2d(2)),  # Output is 64x64
+            *convlayer(16, 32, 3, 1, 1, resample_out=nn.MaxPool2d(2)),  # Output is 32x32
+            ResidualBlock(32),
+            ResidualBlock(32),
+            ResidualBlock(32),
+            ResidualBlock(32),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),  # Upsample to 64x64
+            *convlayer(32, 16, 3, 1, 1),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),  # Upsample to 128x128
+            *convlayer(16, out_channels, 3, 1, 1),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),  # Upsample to 256x256
+            self.out_activation
+        )
+
+    def forward(self, x):
+        x = self.model(x)
+        x = x * self.output_scaling  # Scaling to improve numerical stability
+        return x
+
 class E2E_Decoder(nn.Module):
     """
     Simple non-generic phosphene decoder.
@@ -215,6 +269,7 @@ class E2E_Decoder(nn.Module):
 #         phosphenes = self.simulator(stim_amp=stimulation).clamp(0,1)
 #         phosphenes = phosphenes.view(phosphenes.shape[0], 1, phosphenes.shape[1], phosphenes.shape[2])
 #         return phosphenes
+
 
 class ZhaoEncoder(nn.Module):
     def __init__(self, in_channels=3,n_electrodes=638, out_channels=1):

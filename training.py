@@ -18,7 +18,10 @@ def train(dataset, models, training_pipeline, logging, cfg):
     training_summary = logging['training_summary']
     validation_summary = logging['validation_summary']
     example_output = logging['example_output']
-    tb_writer = logging['tensorboard_writer']
+    logger = logging['logger']
+
+    logger.watch(models['encoder'], log='all', log_freq=cfg['model_log_freq'])
+    logger.watch(models['decoder'], log='all', log_freq=cfg['model_log_freq'])
 
     # Make dir
     if not os.path.exists(cfg['save_path']):
@@ -32,6 +35,7 @@ def train(dataset, models, training_pipeline, logging, cfg):
 
     # Training loop
     best_validation_performance = np.inf
+    global_step = 0
     not_improved_count = 0
     epoch = 0
     while epoch <= cfg['epochs'] and not_improved_count < cfg['early_stop_criterium']:
@@ -49,6 +53,8 @@ def train(dataset, models, training_pipeline, logging, cfg):
             total_loss.backward(retain_graph=False)
             optimizer.step()
 
+            global_step += 1
+
             # Track the loss summary
             training_loss.update(compound_loss_func.items())
 
@@ -61,7 +67,7 @@ def train(dataset, models, training_pipeline, logging, cfg):
                 timestamp = get_timestamp(epoch, batch_idx, total_batches_per_epoch=len(trainloader),
                                           batch_size=cfg['batch_size'])
                 training_summary.update({**timestamp, **training_performance})
-                tb_writer.add_scalars('loss/training', training_performance, timestamp['samples'])
+                logger.log(training_performance)
                 print(timestamp['timestamp'] + '-tr ' + ''.join(
                     ['  {:.8}:  {:.5f}'.format(k, v) for k, v in training_performance.items()]))
 
@@ -74,16 +80,15 @@ def train(dataset, models, training_pipeline, logging, cfg):
                 for key in cfg['save_output']:
                     shape = model_output[key].shape
                     if len(shape) == 4:  # Image batch (N,C,H,W)
-                        tb_writer.add_images(key,
-                                             normalize(model_output[key]),  # (scale to range [0, 1])
-                                             timestamp['samples'], dataformats='NCHW')
+                        images = [logger.Image(i) for i in normalize(model_output[key])]
+                        logger.log({key: images})
+
                     elif len(shape) == 5:  # Video batch (N, C, T, H, W)
                         img_batch = model_output[key][0].permute(1,0,2,3) # First video as img batch
-                        tb_writer.add_images(key,
-                                             normalize(img_batch),  # (scale to range [0, 1])
-                                             timestamp['samples'], dataformats='NCHW')
+                        images = [logger.Image(i) for i in normalize(img_batch)]
+                        logger.log({key: images})
                     elif len(shape) == 2: # (N, P)
-                        tb_writer.add_histogram(key, model_output[key]) # Stimulation
+                        logger.log({key: model_output[key]})
 
             if batch_idx % (len(trainloader) // cfg['validations_per_epoch'] + 1) == 0:
                 # Run validation loop
@@ -93,7 +98,8 @@ def train(dataset, models, training_pipeline, logging, cfg):
                 timestamp = get_timestamp(epoch, batch_idx, total_batches_per_epoch=len(trainloader),
                                           batch_size=cfg['batch_size'])
                 validation_summary.update({**timestamp, **validation_performance})
-                tb_writer.add_scalars('/loss/validation', validation_performance, timestamp['samples'])
+                logger.log(validation_performance)
+
                 print(timestamp['timestamp'] + '-val' + ''.join(
                     ['  {:.8}:  {:.5f}'.format(k, v) for k, v in validation_performance.items()]))
 

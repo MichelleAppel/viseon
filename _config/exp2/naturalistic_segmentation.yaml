@@ -6,7 +6,11 @@ general:
     batch_size: 1
     device: 'cuda:0' 
     gpu : 0
-    save_path : ./out/example_naturalistic_segmentation
+    save_path : ./out/example_naturalistic_boundary_debug2
+    project_name: 'viseon'
+    run_name: 'exp2_segmentation_april30_debug'
+    entity: 'michelleappel'
+    model_log_freq: 16
     save_output: [input, stimulation, phosphenes, reconstruction_rgb, label_rgb]
     
 simulator:
@@ -31,7 +35,7 @@ optimization:
     early_stop_criterium : 15
 
 training_pipeline:
-    pipeline: supervised-segmentation-reconstruction
+    pipeline: supervised-segmentation
     regularization_weight: 0.99999  # relative weight for enforcing interpretable (supervised) phosphene encodings
     
 dataset:
