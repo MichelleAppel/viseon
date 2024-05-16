@@ -20,7 +20,7 @@ def get_e2e_autoencoder(cfg):
         assert cfg['encoder_out_activation'] == 'sigmoid'
         encoder.output_scaling = 1.0
         encoder = torch.nn.Sequential(encoder,
-                                      SafetyLayer(n_steps=10,
+                                      SafetyLayer(n_steps=cfg['output_steps'],
                                                   order=2,
                                                   out_scaling=cfg['output_scaling'])).to(cfg['device'])
     return encoder, decoder
@@ -40,7 +40,7 @@ def get_e2e_autoencoder_nophosphenes(cfg):
         assert cfg['encoder_out_activation'] == 'sigmoid'
         encoder.output_scaling = 1.0
         encoder = torch.nn.Sequential(encoder,
-                                      SafetyLayer(n_steps=10,
+                                      SafetyLayer(n_steps=cfg['output_steps'],
                                                   order=2,
                                                   out_scaling=cfg['output_scaling'])).to(cfg['device'])
     return encoder, decoder
@@ -223,7 +223,7 @@ class E2E_Encoder_nophosphenes(nn.Module):
 
     def forward(self, x):
         x = self.model(x)
-        x = x * self.output_scaling  # Scaling to improve numerical stability
+        # x = x * self.output_scaling  # Scaling to improve numerical stability
         return x
 
 class E2E_Decoder(nn.Module):

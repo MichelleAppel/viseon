@@ -21,6 +21,8 @@ import matplotlib.pyplot as plt
 
 import wandb
 
+from loss_functions import BinaryCrossEntropySorensenDiceLossFunction
+
 class LossTerm():
     """Loss term that can be used for the compound loss"""
 
@@ -100,6 +102,8 @@ def get_dataset(cfg):
         trainset, valset = local_datasets.get_bouncing_mnist_dataset(cfg)
     elif cfg['dataset'] == 'Characters':
         trainset, valset = local_datasets.get_character_dataset(cfg)
+    elif cfg['dataset'] == 'LaPa':
+        trainset, valset = local_datasets.get_lapa_dataset(cfg)
     
     cfg['circular_mask'] = trainset._mask.to(cfg['device'])
         
@@ -399,7 +403,6 @@ def get_pipeline_supervised_boundary_reconstruction_no_phosphenes(cfg):
 
     return forward, loss_func
 
-
 def get_pipeline_supervised_segmentation_reconstruction(cfg):
     def forward(batch, models, cfg, to_cpu=False):
         """Forward pass of the model."""
@@ -475,17 +478,11 @@ def get_pipeline_supervised_segmentation_no_phosphenes(cfg):
 
         # Output dictionary
         out = {'input': image,
-            #    'stimulation': stimulation,
                'latent': latent,
                'reconstruction': reconstruction * cfg['circular_mask'],
                'target': (label * cfg['circular_mask']).squeeze(1),
-               'target_resized': resize(label.float() * cfg['circular_mask'], cfg['SPVsize'],),
                'label_rgb': label_rgb,
                'reconstruction_rgb': reconstruction_rgb}
-
-        # # Sample phosphenes and target at the centers of the phosphenes
-        # out.update({'phosphene_centers': simulator.sample_centers(phosphenes),
-        #             'target_centers': simulator.sample_centers(out['target_resized']) })
 
         if to_cpu:
             # Return a cpu-copy of the model output
@@ -493,9 +490,9 @@ def get_pipeline_supervised_segmentation_no_phosphenes(cfg):
         return out
 
     segmen_loss = LossTerm(name='segmentation_loss',
-                          func=F.cross_entropy,
+                          func=torch.nn.CrossEntropyLoss(weight=torch.tensor(cfg['class_weights'])).to(cfg['device']),
                           arg_names=('reconstruction', 'target'),
-                          weight=1) # weight=1 - cfg['regularization_weight'])
+                          weight=1 - cfg['regularization_weight'])
 
     # regul_loss = LossTerm(name='regularization_loss',
     #                       func=torch.nn.MSELoss(),

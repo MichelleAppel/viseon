@@ -64,6 +64,10 @@ def get_character_dataset(cfg):
                              hor_flip=cfg['flip_horizontal'])
     return trainset, valset
 
+def get_lapa_dataset(cfg):
+    trainset = LaPaDataset(directory=cfg['data_directory'], device=cfg['device'], validation=False)
+    valset = LaPaDataset(directory=cfg['data_directory'], device=cfg['device'], validation=True)
+    return trainset, valset
 
 def create_circular_mask(h, w, center=None, radius=None, circular_mask=True):
 
@@ -405,3 +409,73 @@ class Character_Dataset(Dataset):
 
         return img.to(self.device), lbl.to(self.device)
 
+
+class LaPaDataset(Dataset):
+    def __init__(self, directory, 
+                device=torch.device('cuda:0'), 
+                imsize=(128, 128),
+                grayscale=False,
+                contour_labels=False, 
+                validation=False,
+                circular_mask=True,
+                debug_subset=False):
+        self.directory = directory
+        self.device = device
+        self.imsize = imsize
+        self.grayscale = grayscale
+        self.contour_labels = contour_labels
+        self.validation = validation
+        self.debug_subset = debug_subset
+
+        # Define paths to images and labels
+        image_folder = 'train' if not validation else 'val'
+        label_folder = 'train' if not validation else 'val'
+        
+        self.image_paths = glob(os.path.join(directory, image_folder, 'images', '*.jpg'))
+        self.label_paths = glob(os.path.join(directory, label_folder, 'labels', '*.png'))
+        
+        # Sort to ensure alignment of images and labels
+        self.image_paths.sort()
+        self.label_paths.sort()
+
+        self.img_transform = T.Compose([T.Lambda(lambda img:F.center_crop(img, min(img.size))),
+                                T.Resize(imsize),
+                                T.ToTensor()
+                                ])
+
+        if self.contour_labels:
+            # Transformation for target with contour detection
+            contour = lambda im: im.filter(ImageFilter.FIND_EDGES).point(lambda p: p > 1 and 255) if self.contour_labels else im
+            self.trg_transform = T.Compose([T.Lambda(lambda img:F.center_crop(img, min(img.size))),
+                                            T.Resize(imsize,interpolation=T.InterpolationMode.NEAREST), # Nearest Neighbour
+                                            T.Lambda(contour),
+                                            T.ToTensor()
+                                            ])
+        else:
+            # Transformation for target with semantic labels
+            self.trg_transform = T.Compose([
+                                            T.Lambda(lambda img: F.center_crop(img, min(img.size))),
+                                            T.Resize(imsize, interpolation=T.InterpolationMode.NEAREST), # Nearest Neighbour is typically used for segmentation labels to avoid interpolation artifacts
+                                            T.Lambda(lambda img: torch.from_numpy(np.array(img)).long()) # For masks
+                                        ])
+
+
+        if circular_mask:
+            self._mask = create_circular_mask(*imsize).view(1, *imsize)
+        else:
+            self._mask = None
+
+
+    def __len__(self):
+        return len(self.image_paths)
+
+    def __getitem__(self, idx):
+        # Load image and label
+        image = Image.open(self.image_paths[idx]).convert('RGB')
+        label = Image.open(self.label_paths[idx]).convert('L')  # Assuming labels are grayscale
+
+        # Apply transformations
+        image = self.img_transform(image)*self._mask
+        label = self.trg_transform(label)*self._mask
+
+        return image.to(self.device), label.to(self.device)
