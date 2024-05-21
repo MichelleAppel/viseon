@@ -491,7 +491,7 @@ def get_pipeline_supervised_segmentation_no_phosphenes(cfg):
         # phosphenes = simulator(stimulation).unsqueeze(1)
         reconstruction = decoder(latent)
         if cfg['circular_mask']:
-            reconstruction *= cfg['circular_mask']
+            reconstruction = reconstruction * cfg['circular_mask']
 
         reconstruction_rgb = tensor_to_rgb(torch.nn.functional.softmax(reconstruction.detach(), dim=1).argmax(1, keepdims=True), cfg['num_classes'])
 

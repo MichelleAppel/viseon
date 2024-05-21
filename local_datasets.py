@@ -484,7 +484,7 @@ class LaPaDataset(Dataset):
         image = self.img_transform(image)
         label = self.trg_transform(label)
 
-        if self._mask != None:
+        if self._mask is not None:
             image = image * self._mask
             label = label * self._mask
 
