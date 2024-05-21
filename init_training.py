@@ -133,8 +133,7 @@ def get_dataset(cfg):
     elif cfg['dataset'] == 'LaPa':
         trainset, valset = local_datasets.get_lapa_dataset(cfg)
     
-    if cfg['circular_mask']:
-        cfg['circular_mask'] = trainset._mask.to(cfg['device'])
+    cfg['circular_mask'] = trainset._mask.to(cfg['device'])
         
     if cfg['debug_subset']:
         # Subset for debugging: Use only the first 100 samples from each dataset
