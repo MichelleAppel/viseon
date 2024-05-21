@@ -8,7 +8,7 @@ general:
     gpu: 0
     save_path : ./out/faces_no_phosphenes/
     project_name: 'viseon'
-    run_name: 'face segmentation latent circular mask'
+    run_name: 'face segmentation latent - snellius'
     entity: 'michelleappel'
     model_log_freq: 16
     save_output: [input, latent, reconstruction_rgb, label_rgb]
@@ -52,7 +52,7 @@ dataset:
     dataset: LaPa # choose from ADE20K, BouncingMNIST, LaPa
     target: 'segmentation' # choose from 'segmentation', 'boundary'
     num_classes: 11
-    data_directory : C:\Users\appel\Documents\Project\Dynaphos\data\face\LaPa
+    data_directory : data/face/LaPa
     debug_subset: False
     load_preprocessed: True # for the ADE50k dataset:
     sequence_length: 5 # for the BouncingMNIST dataset:
