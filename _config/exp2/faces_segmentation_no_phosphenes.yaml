@@ -8,7 +8,7 @@ general:
     gpu: 0
     save_path : ./out/faces_no_phosphenes/
     project_name: 'viseon'
-    run_name: 'face segmentation latent circular mask - snellius'
+    run_name: 'face segmentation latent circular mask'
     entity: 'michelleappel'
     model_log_freq: 16
     save_output: [input, latent, reconstruction_rgb, label_rgb]
@@ -40,6 +40,9 @@ optimization:
     weight_decay: 0.00001
     lr_patience: 4
     lr_factor: 0.1
+    dice_loss_weight: 0.5
+    focal_loss_weight: 0.5
+    cross_entropy_loss_weight: 0.5
 
 training_pipeline:
     pipeline: supervised-segmentation-no-phosphenes

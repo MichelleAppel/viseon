@@ -89,6 +89,9 @@ def train(dataset, models, training_pipeline, logging, cfg):
                         images = [logger.Image(i) for i in normalize(img_batch)]
                         logger.log({key: images})
                     elif len(shape) == 2: # (N, P)
+                        # Log as histogram
+                        logger.log({key: logger.Histogram(model_output[key])})
+                    elif len(shape) == 1:
                         logger.log({key: model_output[key]})
 
             if batch_idx % (len(trainloader) // cfg['validations_per_epoch'] + 1) == 0:
