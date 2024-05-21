@@ -22,14 +22,16 @@ def get_ade20k_dataset(cfg):
                                           load_preprocessed=cfg['load_preprocessed'],
                                           grayscale=cfg['in_channels']==1,
                                           contour_labels=cfg['target']=='boundary',
-                                          debug_subset=cfg['debug_subset'])
+                                          debug_subset=cfg['debug_subset'],
+                                          circular_mask=cfg['circular_mask'])
     valset = ADE_Dataset(device=cfg['device'], directory=cfg['data_directory'],
                                         imsize=(128, 128),
                                         load_preprocessed=cfg['load_preprocessed'],
                                         grayscale=cfg['in_channels']==1,
                                         contour_labels=cfg['target']=='boundary',
                                         validation=True,
-                                        debug_subset=cfg['debug_subset'])
+                                        debug_subset=cfg['debug_subset'],
+                                        circular_mask=cfg['circular_mask'])
     return trainset, valset
 
 def get_bouncing_mnist_dataset(cfg):
@@ -65,8 +67,8 @@ def get_character_dataset(cfg):
     return trainset, valset
 
 def get_lapa_dataset(cfg):
-    trainset = LaPaDataset(directory=cfg['data_directory'], device=cfg['device'], validation=False)
-    valset = LaPaDataset(directory=cfg['data_directory'], device=cfg['device'], validation=True)
+    trainset = LaPaDataset(directory=cfg['data_directory'], device=cfg['device'], validation=False, circular_mask=cfg['circular_mask'])
+    valset = LaPaDataset(directory=cfg['data_directory'], device=cfg['device'], validation=True, circular_mask=cfg['circular_mask'])
     return trainset, valset
 
 def create_circular_mask(h, w, center=None, radius=None, circular_mask=True):
@@ -433,6 +435,10 @@ class LaPaDataset(Dataset):
         
         self.image_paths = glob(os.path.join(directory, image_folder, 'images', '*.jpg'))
         self.label_paths = glob(os.path.join(directory, label_folder, 'labels', '*.png'))
+
+        if debug_subset:
+            self.image_paths = self.image_paths[:debug_subset]
+            self.label_paths = self.label_paths[:debug_subset]
         
         # Sort to ensure alignment of images and labels
         self.image_paths.sort()
@@ -475,7 +481,11 @@ class LaPaDataset(Dataset):
         label = Image.open(self.label_paths[idx]).convert('L')  # Assuming labels are grayscale
 
         # Apply transformations
-        image = self.img_transform(image)*self._mask
-        label = self.trg_transform(label)*self._mask
+        image = self.img_transform(image)
+        label = self.trg_transform(label)
+
+        if self._mask:
+            image = image * self._mask
+            label = label * self._mask
 
         return image.to(self.device), label.to(self.device)

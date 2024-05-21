@@ -12,6 +12,7 @@ def train(dataset, models, training_pipeline, logging, cfg):
     trainloader = dataset['trainloader']
     example_batch = dataset['example_batch']
     optimizer = models['optimizer']
+    scheduler = models['scheduler']
     compound_loss_func = training_pipeline['compound_loss_func']
     forward = training_pipeline['forward']
     training_loss = logging['training_loss']
@@ -99,9 +100,13 @@ def train(dataset, models, training_pipeline, logging, cfg):
                                           batch_size=cfg['batch_size'])
                 validation_summary.update({**timestamp, **validation_performance})
                 logger.log(validation_performance)
+                logger.log({'lr': optimizer.param_groups[0]['lr']})
 
                 print(timestamp['timestamp'] + '-val' + ''.join(
                     ['  {:.8}:  {:.5f}'.format(k, v) for k, v in validation_performance.items()]))
+                
+                # Step the scheduler with the validation loss
+                scheduler.step(validation_performance['total'])
 
                 if validation_performance['total'] < best_validation_performance:
                     best_validation_performance = validation_performance['total']
@@ -182,7 +187,7 @@ def get_validation_results(dataset, models, training_pipeline, cfg):
     output = CustomSummaryTracker()
     performance = CustomSummaryTracker()
     for batch in dataset['valloader']:
-        model_output = training_pipeline['forward'](batch, models, cfg, to_cpu=True)
+        model_output = training_pipeline['forward'](batch, models, cfg, to_cpu=False)
         save_output = {key: model_output[key] for key in cfg['save_output']}
         output.update(save_output)
         loss = training_pipeline['compound_loss_func'](model_output)

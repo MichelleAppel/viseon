@@ -16,12 +16,11 @@ import local_datasets
 from torch.utils.data import DataLoader
 from utils import resize, normalize, tensor_to_rgb, undo_standardize, dilation3x3, CustomSummaryTracker
 import torch.nn.functional as F
+import torch.nn as nn
 
 import matplotlib.pyplot as plt
 
 import wandb
-
-from loss_functions import BinaryCrossEntropySorensenDiceLossFunction
 
 class LossTerm():
     """Loss term that can be used for the compound loss"""
@@ -94,6 +93,21 @@ class L1FeatureLoss(object):
         return torch.mean(torch.stack(err))
 
 
+class DiceLoss(nn.Module):
+    def __init__(self, smooth=1e-6):
+        super(DiceLoss, self).__init__()
+        self.smooth = smooth
+
+    def forward(self, prediction, target):
+        prediction = torch.nn.functional.softmax(prediction, dim=1)
+        target = torch.nn.functional.one_hot(target, num_classes=prediction.shape[1]).permute(0, 3, 1, 2).float()
+        
+        intersection = (prediction * target).sum(dim=(2, 3))
+        union = prediction.sum(dim=(2, 3)) + target.sum(dim=(2, 3))
+
+        dice_score = (2. * intersection + self.smooth) / (union + self.smooth)
+        return 1 - dice_score.mean()
+
 
 def get_dataset(cfg):
     if cfg['dataset'] == 'ADE20K':
@@ -105,7 +119,8 @@ def get_dataset(cfg):
     elif cfg['dataset'] == 'LaPa':
         trainset, valset = local_datasets.get_lapa_dataset(cfg)
     
-    cfg['circular_mask'] = trainset._mask.to(cfg['device'])
+    if cfg['circular_mask']:
+        trainset._mask.to(cfg['device'])
         
     if cfg['debug_subset']:
         # Subset for debugging: Use only the first 100 samples from each dataset
@@ -129,21 +144,22 @@ def get_dataset(cfg):
 def get_models(cfg):
     if cfg['model_architecture'] == 'end-to-end-autoencoder':
         encoder, decoder = model.get_e2e_autoencoder(cfg)
-        optimizer = torch.optim.Adam([*encoder.parameters(), *decoder.parameters()], lr=cfg['learning_rate'])
     elif cfg['model_architecture'] == 'end-to-end-autoencoder-nophosphenes':
         encoder, decoder = model.get_e2e_autoencoder_nophosphenes(cfg)
-        optimizer = torch.optim.Adam([*encoder.parameters(), *decoder.parameters()], lr=cfg['learning_rate'])
     elif cfg['model_architecture'] == 'zhao-autoencoder':
         encoder, decoder = model.get_Zhao_autoencoder(cfg)
-        optimizer = torch.optim.Adam([*encoder.parameters(), *decoder.parameters()], lr=cfg['learning_rate'])
     else:
         raise NotImplementedError
+
+    optimizer = torch.optim.Adam([*encoder.parameters(), *decoder.parameters()], lr=cfg['learning_rate'], weight_decay=cfg['weight_decay'])
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=cfg.get('lr_factor', 0.1), patience=cfg.get('lr_patience', 10), verbose=True)
 
     simulator = get_simulator(cfg)
 
     models = {'encoder' : encoder,
               'decoder' : decoder,
               'optimizer': optimizer,
+              'scheduler': scheduler,
               'simulator': simulator,}
     
     # added section for exp3 with interaction layer
@@ -193,7 +209,7 @@ def get_training_pipeline(cfg):
     elif cfg['pipeline'] == 'supervised-boundary-no-phosphenes':
         forward, lossfunc = get_pipeline_supervised_boundary_reconstruction_no_phosphenes(cfg)
     elif cfg['pipeline'] == 'supervised-segmentation':
-        forward, lossfunc = get_pipeline_supervised_segmentation_reconstruction(cfg)
+        forward, lossfunc = get_pipeline_supervised_segmentation(cfg)
     elif cfg['pipeline'] == 'supervised-segmentation-no-phosphenes':
         forward, lossfunc = get_pipeline_supervised_segmentation_no_phosphenes(cfg)
     elif cfg['pipeline'] == 'unconstrained-video-reconstruction':
@@ -403,7 +419,7 @@ def get_pipeline_supervised_boundary_reconstruction_no_phosphenes(cfg):
 
     return forward, loss_func
 
-def get_pipeline_supervised_segmentation_reconstruction(cfg):
+def get_pipeline_supervised_segmentation(cfg):
     def forward(batch, models, cfg, to_cpu=False):
         """Forward pass of the model."""
 
@@ -442,17 +458,22 @@ def get_pipeline_supervised_segmentation_reconstruction(cfg):
             out = {k: v.detach().cpu().clone() for k, v in out.items()}
         return out
 
-    segmen_loss = LossTerm(name='segmentation_loss',
-                          func=F.cross_entropy,
+    cross_entropy_loss = LossTerm(name='cross_entropy_loss',
+                          func=torch.nn.CrossEntropyLoss(weight=torch.tensor(cfg['class_weights'])).to(cfg['device']),
                           arg_names=('reconstruction', 'target'),
-                          weight=1) # weight=1 - cfg['regularization_weight'])
+                          weight=1)
+    
+    dice_loss = LossTerm(name='dice_loss',
+                        func=DiceLoss().to(cfg['device']),
+                        arg_names=('reconstruction', 'target'),
+                        weight=1)
 
     # regul_loss = LossTerm(name='regularization_loss',
     #                       func=torch.nn.MSELoss(),
     #                       arg_names=('phosphene_centers', 'target_centers'),
     #                       weight=cfg['regularization_weight'])
 
-    loss_func = CompoundLoss([segmen_loss]) #, regul_loss])
+    loss_func = CompoundLoss([cross_entropy_loss, dice_loss]) #, regul_loss])
 
     return forward, loss_func
 
@@ -473,14 +494,17 @@ def get_pipeline_supervised_segmentation_no_phosphenes(cfg):
         simulator.reset()
         latent = encoder(image)
         # phosphenes = simulator(stimulation).unsqueeze(1)
-        reconstruction = decoder(latent) * cfg['circular_mask']
+        reconstruction = decoder(latent)
+        if cfg['circular_mask']:
+            reconstruction *= cfg['circular_mask']
+
         reconstruction_rgb = tensor_to_rgb(torch.nn.functional.softmax(reconstruction.detach(), dim=1).argmax(1, keepdims=True), cfg['num_classes'])
 
         # Output dictionary
         out = {'input': image,
                'latent': latent,
-               'reconstruction': reconstruction * cfg['circular_mask'],
-               'target': (label * cfg['circular_mask']).squeeze(1),
+               'reconstruction': reconstruction,
+               'target': label.squeeze(1),
                'label_rgb': label_rgb,
                'reconstruction_rgb': reconstruction_rgb}
 
@@ -489,17 +513,22 @@ def get_pipeline_supervised_segmentation_no_phosphenes(cfg):
             out = {k: v.detach().cpu().clone() for k, v in out.items()}
         return out
 
-    segmen_loss = LossTerm(name='segmentation_loss',
+    cross_entropy_loss = LossTerm(name='cross_entropy_loss',
                           func=torch.nn.CrossEntropyLoss(weight=torch.tensor(cfg['class_weights'])).to(cfg['device']),
                           arg_names=('reconstruction', 'target'),
-                          weight=1 - cfg['regularization_weight'])
+                          weight=1)
+    
+    dice_loss = LossTerm(name='dice_loss',
+                        func=DiceLoss().to(cfg['device']),
+                        arg_names=('reconstruction', 'target'),
+                        weight=1)
 
     # regul_loss = LossTerm(name='regularization_loss',
     #                       func=torch.nn.MSELoss(),
     #                       arg_names=('phosphene_centers', 'target_centers'),
     #                       weight=cfg['regularization_weight'])
 
-    loss_func = CompoundLoss([segmen_loss]) #, regul_loss])
+    loss_func = CompoundLoss([cross_entropy_loss, dice_loss]) #, regul_loss])
 
     return forward, loss_func
 

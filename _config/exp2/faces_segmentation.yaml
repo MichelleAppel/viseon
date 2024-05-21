@@ -18,11 +18,11 @@ simulator:
     phosphene_map: ./_config/phosphene_maps/DefaultCoordinateMap_1000_phosphenes.pickle
     
 e2e_models:
-    model_architecture: end-to-end-autoencoder-nophosphenes # choose from end-to-end-autoencoder, zhao-autoencoder
+    model_architecture: end-to-end-autoencoder # choose from end-to-end-autoencoder, zhao-autoencoder
     in_channels: 3
     n_electrodes: 1000
-    output_scaling: 16
-    output_steps: 256 # output is constrained to 10 possible steps in the range [0, output_scaling]
+    output_scaling: 10
+    output_steps: 10 # output is constrained to 10 possible steps in the range [0, output_scaling]
     out_channels: 11
     encoder_out_activation: sigmoid
     decoder_out_activation: sigmoid
@@ -35,14 +35,14 @@ optimization:
     early_stop_criterium: 15
     alpha: 0.5
     epsilon: 1
-    # class_weights: [1.66, 5.34, 359.05, 364.84, 608.89, 607.76, 70.59, 417.37, 407.92, 250.42, 5.6] # with circle mask
-    class_weights: [1.47, 6.8, 457.62, 464.98, 776.2, 774.68, 89.99, 532.09, 520.02, 319.24, 6.76] # without circle mask
+    class_weights: [1.66, 5.34, 359.05, 364.84, 608.89, 607.76, 70.59, 417.37, 407.92, 250.42, 5.6] # with circle mask
+    # class_weights: [1.47, 6.8, 457.62, 464.98, 776.2, 774.68, 89.99, 532.09, 520.02, 319.24, 6.76] # without circle mask
     weight_decay: 0.00001
     lr_patience: 4
     lr_factor: 0.1
 
 training_pipeline:
-    pipeline: supervised-segmentation-no-phosphenes
+    pipeline: supervised-segmentation
     regularization_weight: 0  # relative weight for enforcing interpretable (supervised) phosphene encodings
     
 dataset:
@@ -54,4 +54,4 @@ dataset:
     load_preprocessed: True # for the ADE50k dataset:
     sequence_length: 5 # for the BouncingMNIST dataset:
     mode: recon # for the BouncingMNIST dataset:
-    circular_mask: False
+    circular_mask: True
