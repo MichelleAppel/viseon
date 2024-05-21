@@ -107,6 +107,20 @@ class DiceLoss(nn.Module):
 
         dice_score = (2. * intersection + self.smooth) / (union + self.smooth)
         return 1 - dice_score.mean()
+    
+class FocalLoss(torch.nn.Module):
+    def __init__(self, alpha=1, gamma=2):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+
+    def forward(self, inputs, targets):
+        BCE_loss = F.cross_entropy(inputs, targets, reduction='none')
+        pt = torch.exp(-BCE_loss)
+        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
+        return F_loss.mean()
+
+    
 
 
 def get_dataset(cfg):
@@ -120,7 +134,7 @@ def get_dataset(cfg):
         trainset, valset = local_datasets.get_lapa_dataset(cfg)
     
     if cfg['circular_mask']:
-        trainset._mask.to(cfg['device'])
+        cfg['circular_mask'] = trainset._mask.to(cfg['device'])
         
     if cfg['debug_subset']:
         # Subset for debugging: Use only the first 100 samples from each dataset
@@ -405,17 +419,22 @@ def get_pipeline_supervised_boundary_reconstruction_no_phosphenes(cfg):
             out = {k: v.detach().cpu().clone() for k, v in out.items()}
         return out
 
-    recon_loss = LossTerm(name='reconstruction_loss',
-                          func=torch.nn.MSELoss(),
+    cross_entropy_loss = LossTerm(name='cross_entropy_loss',
+                          func=torch.nn.CrossEntropyLoss(weight=torch.tensor(cfg['class_weights'])).to(cfg['device']),
                           arg_names=('reconstruction', 'target'),
-                          weight=1 - cfg['regularization_weight'])
+                          weight=0.5)
+    
+    dice_loss = LossTerm(name='dice_loss',
+                        func=DiceLoss().to(cfg['device']),
+                        arg_names=('reconstruction', 'target'),
+                        weight=0.5)
+    
+    focal_loss = LossTerm(name='focal_loss',
+                        func=FocalLoss().to(cfg['device']),
+                        arg_names=('reconstruction', 'target'),
+                        weight=0.5)
 
-    # regul_loss = LossTerm(name='regularization_loss',
-    #                       func=torch.nn.MSELoss(),
-    #                       arg_names=('phosphene_centers', 'target_centers'),
-    #                       weight=cfg['regularization_weight'])
-
-    loss_func = CompoundLoss([recon_loss])
+    loss_func = CompoundLoss([cross_entropy_loss, dice_loss, focal_loss])
 
     return forward, loss_func
 
@@ -443,15 +462,15 @@ def get_pipeline_supervised_segmentation(cfg):
         out = {'input': image,
                'stimulation': stimulation,
                'phosphenes': phosphenes,
-               'reconstruction': reconstruction * cfg['circular_mask'],
+               'reconstruction': reconstruction,
                'target': (label * cfg['circular_mask']).squeeze(1),
                'target_resized': resize(label.float() * cfg['circular_mask'], cfg['SPVsize'],),
                'label_rgb': label_rgb,
                'reconstruction_rgb': reconstruction_rgb}
 
-        # # Sample phosphenes and target at the centers of the phosphenes
-        # out.update({'phosphene_centers': simulator.sample_centers(phosphenes),
-        #             'target_centers': simulator.sample_centers(out['target_resized']) })
+        # Sample phosphenes and target at the centers of the phosphenes
+        out.update({'phosphene_centers': simulator.sample_centers(phosphenes),
+                    'target_centers': simulator.sample_centers(out['target_resized']) })
 
         if to_cpu:
             # Return a cpu-copy of the model output
@@ -461,14 +480,19 @@ def get_pipeline_supervised_segmentation(cfg):
     cross_entropy_loss = LossTerm(name='cross_entropy_loss',
                           func=torch.nn.CrossEntropyLoss(weight=torch.tensor(cfg['class_weights'])).to(cfg['device']),
                           arg_names=('reconstruction', 'target'),
-                          weight=0.3)
+                          weight=0.5)
     
     dice_loss = LossTerm(name='dice_loss',
                         func=DiceLoss().to(cfg['device']),
                         arg_names=('reconstruction', 'target'),
-                        weight=0.7)
+                        weight=0.5)
+    
+    focal_loss = LossTerm(name='focal_loss',
+                        func=FocalLoss().to(cfg['device']),
+                        arg_names=('reconstruction', 'target'),
+                        weight=0.5)
 
-    loss_func = CompoundLoss([cross_entropy_loss, dice_loss])
+    loss_func = CompoundLoss([cross_entropy_loss, dice_loss, focal_loss])
 
     return forward, loss_func
 

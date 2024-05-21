@@ -18,7 +18,7 @@ def get_e2e_autoencoder(cfg):
     # If output steps are specified, add safety layer at the end of the encoder model 
     if cfg['output_steps'] != 'None':
         assert cfg['encoder_out_activation'] == 'sigmoid'
-        encoder.output_scaling = cfg['output_scaling']
+        encoder.output_scaling = 1.0
         encoder = torch.nn.Sequential(encoder,
                                       SafetyLayer(n_steps=cfg['output_steps'],
                                                   order=2,
