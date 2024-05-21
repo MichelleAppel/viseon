@@ -21,7 +21,7 @@ e2e_models:
     model_architecture: end-to-end-autoencoder # choose from end-to-end-autoencoder, zhao-autoencoder
     in_channels: 3
     n_electrodes: 1000
-    output_scaling: 10
+    output_scaling: 128.0e-6
     output_steps: 10 # output is constrained to 10 possible steps in the range [0, output_scaling]
     out_channels: 11
     encoder_out_activation: sigmoid

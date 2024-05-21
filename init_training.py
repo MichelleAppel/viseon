@@ -511,12 +511,12 @@ def get_pipeline_supervised_segmentation_no_phosphenes(cfg):
     cross_entropy_loss = LossTerm(name='cross_entropy_loss',
                           func=torch.nn.CrossEntropyLoss(weight=torch.tensor(cfg['class_weights'])).to(cfg['device']),
                           arg_names=('reconstruction', 'target'),
-                          weight=1)
+                          weight=0.3)
     
     dice_loss = LossTerm(name='dice_loss',
                         func=DiceLoss().to(cfg['device']),
                         arg_names=('reconstruction', 'target'),
-                        weight=1)
+                        weight=0.7)
 
     # regul_loss = LossTerm(name='regularization_loss',
     #                       func=torch.nn.MSELoss(),
