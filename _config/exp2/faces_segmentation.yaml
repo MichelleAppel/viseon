@@ -3,15 +3,15 @@ Description:
 
 general: 
     use_deterministic_algorithms: False
-    batch_size: 4
+    batch_size: 2
     device: 'cuda:0' 
     gpu : 0
-    save_path : ./out/faces_no_phosphenes/
+    save_path : ./out/faces/
     project_name: 'viseon'
-    run_name: 'face segmentation latent dice loss'
+    run_name: 'face segmentation phosphenes'
     entity: 'michelleappel'
     model_log_freq: 16
-    save_output: [input, latent, reconstruction_rgb, label_rgb]
+    save_output: [input, stimulation, phosphenes, reconstruction_rgb, label_rgb]
     
 simulator:
     base_config: ./_config/exp2/simulator_config.yaml
@@ -49,7 +49,7 @@ dataset:
     dataset: LaPa # choose from ADE20K, BouncingMNIST, LaPa
     target: 'segmentation' # choose from 'segmentation', 'boundary'
     num_classes: 11
-    data_directory : C:\Users\appel\Documents\Project\Dynaphos\data\face\LaPa\LaPa
+    data_directory : C:\Users\appel\Documents\Project\Dynaphos\data\face\LaPa
     debug_subset: False
     load_preprocessed: True # for the ADE50k dataset:
     sequence_length: 5 # for the BouncingMNIST dataset:
