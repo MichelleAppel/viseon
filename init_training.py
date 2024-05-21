@@ -461,19 +461,14 @@ def get_pipeline_supervised_segmentation(cfg):
     cross_entropy_loss = LossTerm(name='cross_entropy_loss',
                           func=torch.nn.CrossEntropyLoss(weight=torch.tensor(cfg['class_weights'])).to(cfg['device']),
                           arg_names=('reconstruction', 'target'),
-                          weight=1)
+                          weight=0.3)
     
     dice_loss = LossTerm(name='dice_loss',
                         func=DiceLoss().to(cfg['device']),
                         arg_names=('reconstruction', 'target'),
-                        weight=1)
+                        weight=0.7)
 
-    # regul_loss = LossTerm(name='regularization_loss',
-    #                       func=torch.nn.MSELoss(),
-    #                       arg_names=('phosphene_centers', 'target_centers'),
-    #                       weight=cfg['regularization_weight'])
-
-    loss_func = CompoundLoss([cross_entropy_loss, dice_loss]) #, regul_loss])
+    loss_func = CompoundLoss([cross_entropy_loss, dice_loss])
 
     return forward, loss_func
 
