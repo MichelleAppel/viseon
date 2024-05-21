@@ -8,7 +8,7 @@ general:
     gpu: 0
     save_path : ./out/faces_no_phosphenes/
     project_name: 'viseon'
-    run_name: 'face segmentation latent circular mask'
+    run_name: 'face segmentation latent circular mask - snellius'
     entity: 'michelleappel'
     model_log_freq: 16
     save_output: [input, latent, reconstruction_rgb, label_rgb]
