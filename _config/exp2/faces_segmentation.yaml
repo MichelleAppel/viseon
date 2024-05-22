@@ -3,7 +3,7 @@ Description:
 
 general: 
     use_deterministic_algorithms: False
-    batch_size: 8
+    batch_size: 2
     device: 'cuda:0' 
     gpu : 0
     save_path : ./out/faces/
@@ -35,13 +35,14 @@ optimization:
     early_stop_criterium: 15
     alpha: 0.5
     epsilon: 1
-    class_weights: [1.66, 5.34, 359.05, 364.84, 608.89, 607.76, 70.59, 417.37, 407.92, 250.42, 5.6] # with circle mask
+    # class_weights: [1.66, 5.34, 359.05, 364.84, 608.89, 607.76, 70.59, 417.37, 407.92, 250.42, 5.6] # with circle mask
     # class_weights: [1.47, 6.8, 457.62, 464.98, 776.2, 774.68, 89.99, 532.09, 520.02, 319.24, 6.76] # without circle mask
-    weight_decay: 0.00001
-    lr_patience: 4
+    class_weights: [1.45, 6.81, 457.75, 465.14, 776.28, 774.85, 89.99, 532.11, 520.07, 319.26, 7.14] # no circle mask enforced in reconstruction
+    weight_decay: 0.000001
+    lr_patience: 5
     lr_factor: 0.1
-    dice_loss_weight: 1
-    cross_entropy_loss_weight: 1
+    dice_loss_weight: 0.5
+    cross_entropy_loss_weight: 0.5
 
 training_pipeline:
     pipeline: supervised-segmentation
@@ -51,13 +52,6 @@ dataset:
     dataset: LaPa # choose from ADE20K, BouncingMNIST, LaPa
     target: 'segmentation' # choose from 'segmentation', 'boundary'
     num_classes: 11
-<<<<<<< HEAD
     data_directory : ../data/face/LaPa
-=======
-    data_directory : data/face/LaPa
->>>>>>> f6955215e5a2d49712fde92736f48bf17664b5c1
     debug_subset: False
-    load_preprocessed: True # for the ADE50k dataset:
-    sequence_length: 5 # for the BouncingMNIST dataset:
-    mode: recon # for the BouncingMNIST dataset:
     circular_mask: True
