@@ -199,17 +199,19 @@ def get_logging(cfg):
 ####### ADJUST OR ADD TRAINING PIPELINE BELOW
 
 def get_training_pipeline(cfg):
+    if cfg['pipeline'] == 'unsupervised-segmentation':
+        forward, lossfunc = get_pipeline_unsupervised_segmentation(cfg)
     if cfg['pipeline'] == 'supervised-segmentation':
         forward, lossfunc = get_pipeline_supervised_segmentation(cfg)
-    elif cfg['pipeline'] == 'supervised-segmentation-no-phosphenes':
-        forward, lossfunc = get_pipeline_supervised_segmentation_no_phosphenes(cfg)
+    elif cfg['pipeline'] == 'segmentation-latent':
+        forward, lossfunc = get_pipeline_segmentation_latent(cfg)
     else:
         print(cfg['pipeline'] + 'not supported yet')
         raise NotImplementedError
 
     return {'forward': forward, 'compound_loss_func': lossfunc}
 
-def get_pipeline_supervised_segmentation(cfg):
+def get_pipeline_unsupervised_segmentation(cfg):
     def forward(batch, models, cfg, to_cpu=False):
         """Forward pass of the model."""
 
@@ -237,11 +239,9 @@ def get_pipeline_supervised_segmentation(cfg):
                'target': (label * cfg['circular_mask']).squeeze(1),
                'target_resized': resize(label.float() * cfg['circular_mask'], cfg['SPVsize'],),
                'label_rgb': label_rgb,
-               'reconstruction_rgb': reconstruction_rgb}
+               'reconstruction_rgb': reconstruction_rgb,
+               }
 
-        # Sample phosphenes and target at the centers of the phosphenes
-        out.update({'phosphene_centers': simulator.sample_centers(phosphenes),
-                    'target_centers': simulator.sample_centers(out['target_resized']) })
 
         if to_cpu:
             # Return a cpu-copy of the model output
@@ -257,13 +257,73 @@ def get_pipeline_supervised_segmentation(cfg):
                         func=DiceLoss().to(cfg['device']),
                         arg_names=('reconstruction', 'target'),
                         weight=cfg['dice_loss_weight'])
-
-
+    
     loss_func = CompoundLoss([cross_entropy_loss, dice_loss])
 
     return forward, loss_func
 
-def get_pipeline_supervised_segmentation_no_phosphenes(cfg):
+def get_pipeline_supervised_segmentation(cfg):
+    def forward(batch, models, cfg, to_cpu=False):
+        """Forward pass of the model."""
+
+        # unpack
+        encoder = models['encoder']
+        decoder = models['decoder']
+        simulator = models['simulator']
+
+        # Data manipulation
+        image, label = batch
+        label_rgb = tensor_to_rgb(label, cfg['num_classes'])
+        unstandardized_image = undo_standardize(image).mean(1, keepdims=True)
+
+        # Forward pass
+        simulator.reset()
+        stimulation = encoder(image)
+        phosphenes = simulator(stimulation).unsqueeze(1)
+        reconstruction = decoder(phosphenes) # * cfg['circular_mask']
+        reconstruction_rgb = tensor_to_rgb(torch.nn.functional.softmax(reconstruction.detach(), dim=1).argmax(1, keepdims=True), cfg['num_classes'])
+
+        # Output dictionary
+        out = {'input': image,
+               'stimulation': stimulation,
+               'phosphenes': phosphenes,
+               'reconstruction': reconstruction,
+               'target': (label * cfg['circular_mask']).squeeze(1),
+               'target_resized': resize(label.float() * cfg['circular_mask'], cfg['SPVsize'],),
+               'label_rgb': label_rgb,
+               'reconstruction_rgb': reconstruction_rgb,
+               'input_resized': resize(unstandardized_image * cfg['circular_mask'], cfg['SPVsize'])}
+
+        # Sample phosphenes and target at the centers of the phosphenes
+        out.update({'phosphene_centers': simulator.sample_centers(phosphenes),
+                    'input_centers': simulator.sample_centers(out['input_resized']),
+                    'target_centers': simulator.sample_centers(out['target_resized'])})
+
+        if to_cpu:
+            # Return a cpu-copy of the model output
+            out = {k: v.detach().cpu().clone() for k, v in out.items()}
+        return out
+
+    cross_entropy_loss = LossTerm(name='cross_entropy_loss',
+                          func=torch.nn.CrossEntropyLoss(weight=torch.tensor(cfg['class_weights'])).to(cfg['device']),
+                          arg_names=('reconstruction', 'target'),
+                          weight=cfg['cross_entropy_loss_weight'])
+    
+    dice_loss = LossTerm(name='dice_loss',
+                        func=DiceLoss().to(cfg['device']),
+                        arg_names=('reconstruction', 'target'),
+                        weight=cfg['dice_loss_weight'])
+    
+    regul_loss = LossTerm(name='regularization_loss',
+                          func=torch.nn.MSELoss(),
+                          arg_names=('phosphene_centers', 'input_centers'),
+                          weight=cfg['regularization_weight'])
+    
+    loss_func = CompoundLoss([cross_entropy_loss, dice_loss, regul_loss])
+
+    return forward, loss_func
+
+def get_pipeline_segmentation_latent(cfg):
     def forward(batch, models, cfg, to_cpu=False):
         """Forward pass of the model."""
 
@@ -305,63 +365,8 @@ def get_pipeline_supervised_segmentation_no_phosphenes(cfg):
                         func=DiceLoss().to(cfg['device']),
                         arg_names=('reconstruction', 'target'),
                         weight=cfg['dice_loss_weight'])
+    
 
     loss_func = CompoundLoss([cross_entropy_loss, dice_loss])
-
-    return forward, loss_func
-    def forward(batch, models, cfg, to_cpu=False):
-        """Forward pass of the model."""
-
-        # unpack
-        encoder = models['encoder']
-        decoder = models['decoder']
-        simulator = models['simulator']
-
-        # Data manipulation
-        image, _ = batch
-
-        # Forward pass
-        simulator.reset()
-        stimulation = encoder(image)
-        phosphenes = simulator(stimulation).unsqueeze(1)
-        reconstruction = decoder(phosphenes)
-        
-        coactivation = models['interaction'](stimulation) # current leaking to neighbouring electrodes
-
-        # Output dictionary
-        out = {'input':  image * cfg['circular_mask'],
-               'stimulation': stimulation,
-               'phosphenes': phosphenes,
-               'reconstruction': reconstruction * cfg['circular_mask'],
-               'input_resized': resize(image * cfg['circular_mask'], cfg['SPVsize'])}
-        
-        # Target phosphene brightness is sampled pixels at centers of the phosphenes
-        target_pixels = simulator.sample_centers(out['input_resized']).squeeze()
-        out.update({'phosphene_brightness': simulator.get_state()['brightness'].squeeze(),
-                    'target_brightness': cfg['target_brightness_scale']*target_pixels,
-                    'coactivation': coactivation})
-
-        if to_cpu:
-            # Return a cpu-copy of the model output
-            out = {k: v.detach().cpu().clone() for k, v in out.items()}
-        return out
-
-    recon_loss = LossTerm(name='reconstruction_loss',
-                          func=torch.nn.MSELoss(),
-                          arg_names=('reconstruction', 'input'),
-                          weight=1 - cfg['regularization_weight'])
-
-    regul_loss = LossTerm(name='regularization_loss',
-                          func=torch.nn.MSELoss(),
-                          arg_names=('phosphene_brightness', 'target_brightness'),
-                          weight=cfg['regularization_weight'])
-    
-    coact_loss = LossTerm(name='coactivation_loss',
-                      func= lambda x1, x2: torch.mean(x1*x2), # mean of product
-                      arg_names=('stimulation','coactivation'),
-                      weight=cfg['coact_loss_scale'])
-
-
-    loss_func = CompoundLoss([recon_loss, regul_loss, coact_loss])
 
     return forward, loss_func

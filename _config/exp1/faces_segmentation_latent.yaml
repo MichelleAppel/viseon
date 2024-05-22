@@ -41,7 +41,7 @@ optimization:
     cross_entropy_loss_weight: 0.5
 
 training_pipeline:
-    pipeline: supervised-segmentation-no-phosphenes
+    pipeline: segmentation-latent
     regularization_weight: 0  # relative weight for enforcing interpretable (supervised) phosphene encodings
     
 dataset:
