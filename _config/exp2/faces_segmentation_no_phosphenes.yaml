@@ -40,8 +40,11 @@ optimization:
     weight_decay: 0.00001
     lr_patience: 4
     lr_factor: 0.1
-    dice_loss_weight: 1
-    cross_entropy_loss_weight: 1
+    dice_loss_weight: 0
+    cross_entropy_loss_weight: 0
+    sorensen_loss_weight: 1
+    alpha_dice: 0.5
+    epsilon_dice: 1
 
 training_pipeline:
     pipeline: supervised-segmentation-no-phosphenes

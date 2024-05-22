@@ -5,6 +5,8 @@ import dynaphos
 from dynaphos.simulator import GaussianSimulator as PhospheneSimulator
 from dynaphos.utils import get_data_kwargs
 
+from typing import Tuple
+
 import model
 
 from torch.utils.data import Subset
@@ -13,8 +15,7 @@ import local_datasets
 from torch.utils.data import DataLoader
 from utils import resize, tensor_to_rgb, undo_standardize, dilation3x3, CustomSummaryTracker
 import torch.nn as nn
-
-from torchvision.ops import sigmoid_focal_loss
+import torch.nn.functional as F
 
 import wandb
 
@@ -104,6 +105,70 @@ class DiceLoss(nn.Module):
         dice_score = (2. * intersection + self.smooth) / (union + self.smooth)
         return 1 - dice_score.mean()
 
+class MulticlassSorensenDiceLossFunction(nn.Module):
+    """
+    Multiclass Sorensen-Dice loss function module.
+
+    Attributes:
+        epsilon (float): Smoothness.
+
+    Args:
+        epsilon (float, optional): Smoothness. Defaults to 1.
+    """
+    def __init__(self, epsilon: float = 1) -> None:
+        super().__init__()
+        self.epsilon = epsilon
+
+    def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass.
+
+        Args:
+            inputs  (torch.Tensor): Logit tensor (N, C, *).
+            targets (torch.Tensor): Index tensor (N, *).
+
+        Returns:
+            torch.Tensor: Multiclass Sorensen-Dice loss.
+        """
+        inputs = torch.atleast_3d(F.softmax(inputs, 1)).flatten(2)
+        targets = torch.atleast_3d(torch.movedim(F.one_hot(targets, inputs.shape[1]), -1, 1)).flatten(2)
+        return 1 - ((2 * (inputs * targets).sum(2) + self.epsilon) / (inputs.sum(2) + targets.sum(2) + self.epsilon)).mean()
+
+class MulticlassCrossEntropySorensenDiceLossFunction(nn.Module):
+    """
+    Multiclass cross-entropy Sorensen-Dice loss function module.
+
+    Attributes:
+        alpha         (float):                              Weight.
+        cross_entropy (nn.BCEWithLogitsLoss):               Multiclass cross-entropy loss function.
+        sorensen_dice (MulticlassSorensenDiceLossFunction): Multiclass Sorensen-Dice loss function.
+
+    Args:
+        alpha   (float, optional): Weight.                                               Defaults to .5.
+        epsilon (float, optional): Smoothness of multiclass Sorensen-Dice loss function. Defaults to 1.
+    """
+    def __init__(self, alpha: float = .5, epsilon: float = 1, class_weights=None) -> None:
+        super().__init__()
+        self.alpha = alpha
+        self.class_weights = class_weights
+        self.cross_entropy = nn.CrossEntropyLoss(weight=torch.tensor(class_weights))
+        self.sorensen_dice = MulticlassSorensenDiceLossFunction(epsilon)
+
+    def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Forward pass.
+
+        Args:
+            inputs  (torch.Tensor): Logit tensor (N, C, *).
+            targets (torch.Tensor): Index tensor (N, *).
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: Multiclass cross-entropy Sorensen-Dice, cross-entropy and Sorensen-Dice losses.
+        """
+        cross_entropy = self.cross_entropy(inputs, targets)
+        sorensen_dice = self.sorensen_dice(inputs, targets)
+        combined_loss = self.alpha * cross_entropy + (1 - self.alpha) * sorensen_dice
+        return combined_loss
     
 def get_dataset(cfg):
     if cfg['dataset'] == 'ADE20K':
@@ -403,17 +468,17 @@ def get_pipeline_supervised_boundary_reconstruction_no_phosphenes(cfg):
             out = {k: v.detach().cpu().clone() for k, v in out.items()}
         return out
 
-    cross_entropy_loss = LossTerm(name='cross_entropy_loss',
-                          func=torch.nn.CrossEntropyLoss(weight=torch.tensor(cfg['class_weights'])).to(cfg['device']),
+    recon_loss = LossTerm(name='reconstruction_loss',
+                          func=torch.nn.MSELoss(),
                           arg_names=('reconstruction', 'target'),
-                          weight=0.5)
-    
-    dice_loss = LossTerm(name='dice_loss',
-                        func=DiceLoss().to(cfg['device']),
-                        arg_names=('reconstruction', 'target'),
-                        weight=0.5)
+                          weight=1 - cfg['regularization_weight'])
 
-    loss_func = CompoundLoss([cross_entropy_loss, dice_loss])
+    regul_loss = LossTerm(name='regularization_loss',
+                          func=torch.nn.MSELoss(),
+                          arg_names=('phosphene_centers', 'target_centers'),
+                          weight=cfg['regularization_weight'])
+
+    loss_func = CompoundLoss([recon_loss, regul_loss])
 
     return forward, loss_func
 
@@ -517,7 +582,15 @@ def get_pipeline_supervised_segmentation_no_phosphenes(cfg):
                         arg_names=('reconstruction', 'target'),
                         weight=cfg['dice_loss_weight'])
     
-    loss_func = CompoundLoss([cross_entropy_loss, dice_loss])
+    sorensen_loss = LossTerm(name='sorensen_loss',
+                        func=MulticlassCrossEntropySorensenDiceLossFunction(
+                            alpha=cfg['alpha_dice'],
+                            epsilon=cfg['epsilon_dice'],
+                            class_weights=cfg['class_weights']).to(cfg['device']),
+                        arg_names=('reconstruction', 'target'),
+                        weight=cfg['sorensen_loss_weight'])
+
+    loss_func = CompoundLoss([cross_entropy_loss, dice_loss, sorensen_loss])
 
     return forward, loss_func
 
