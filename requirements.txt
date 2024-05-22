@@ -10,3 +10,5 @@ PyYAML
 torch
 torchvision
 tqdm
+wandb
+scipy

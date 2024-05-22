@@ -8,6 +8,7 @@ general:
     gpu: 0
     save_path : ./out/faces_no_phosphenes/
     project_name: 'viseon'
+    run_name: 'face segmentation latent - snellius'
     run_name: 'face segmentation latent focal loss'
     entity: 'michelleappel'
     model_log_freq: 16
@@ -51,6 +52,7 @@ dataset:
     dataset: LaPa # choose from ADE20K, BouncingMNIST, LaPa
     target: 'segmentation' # choose from 'segmentation', 'boundary'
     num_classes: 11
+    data_directory : data/face/LaPa
     data_directory : ../data/face/LaPa
     debug_subset: False
     load_preprocessed: True # for the ADE50k dataset:
