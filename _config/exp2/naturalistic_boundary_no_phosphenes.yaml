@@ -42,7 +42,7 @@ dataset:
     dataset: ADE20K # choose from ADE20K, BouncingMNIST
     target: 'boundary' # choose from 'segmentation', 'boundary'
     num_classes: 250
-    data_directory : C:/Users/appel/Documents/Project/Dynaphos/data/michelle123_5658b6fb/ADE20K/
+    data_directory : ../data/ADE20K
     debug_subset: False # for the ADE50k dataset:
     load_preprocessed: True # for the ADE50k dataset:
     # sequence_length: 5 # for the BouncingMNIST dataset:

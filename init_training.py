@@ -1,10 +1,7 @@
-import os
 import torch
-import numpy as np
 import pickle
 
 import dynaphos
-from dynaphos.cortex_models import get_visual_field_coordinates_probabilistically
 from dynaphos.simulator import GaussianSimulator as PhospheneSimulator
 from dynaphos.utils import get_data_kwargs
 
@@ -14,11 +11,10 @@ from torch.utils.data import Subset
 
 import local_datasets
 from torch.utils.data import DataLoader
-from utils import resize, normalize, tensor_to_rgb, undo_standardize, dilation3x3, CustomSummaryTracker
-import torch.nn.functional as F
+from utils import resize, tensor_to_rgb, undo_standardize, dilation3x3, CustomSummaryTracker
 import torch.nn as nn
 
-import matplotlib.pyplot as plt
+from torchvision.ops import sigmoid_focal_loss
 
 import wandb
 
@@ -107,22 +103,8 @@ class DiceLoss(nn.Module):
 
         dice_score = (2. * intersection + self.smooth) / (union + self.smooth)
         return 1 - dice_score.mean()
-    
-class FocalLoss(torch.nn.Module):
-    def __init__(self, alpha=1, gamma=2):
-        super(FocalLoss, self).__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-
-    def forward(self, inputs, targets):
-        BCE_loss = F.cross_entropy(inputs, targets, reduction='none')
-        pt = torch.exp(-BCE_loss)
-        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
-        return F_loss.mean()
 
     
-
-
 def get_dataset(cfg):
     if cfg['dataset'] == 'ADE20K':
         trainset, valset = local_datasets.get_ade20k_dataset(cfg)
@@ -430,13 +412,8 @@ def get_pipeline_supervised_boundary_reconstruction_no_phosphenes(cfg):
                         func=DiceLoss().to(cfg['device']),
                         arg_names=('reconstruction', 'target'),
                         weight=0.5)
-    
-    focal_loss = LossTerm(name='focal_loss',
-                        func=FocalLoss().to(cfg['device']),
-                        arg_names=('reconstruction', 'target'),
-                        weight=0.5)
 
-    loss_func = CompoundLoss([cross_entropy_loss, dice_loss, focal_loss])
+    loss_func = CompoundLoss([cross_entropy_loss, dice_loss])
 
     return forward, loss_func
 
@@ -488,13 +465,9 @@ def get_pipeline_supervised_segmentation(cfg):
                         func=DiceLoss().to(cfg['device']),
                         arg_names=('reconstruction', 'target'),
                         weight=cfg['dice_loss_weight'])
-    
-    focal_loss = LossTerm(name='focal_loss',
-                        func=FocalLoss().to(cfg['device']),
-                        arg_names=('reconstruction', 'target'),
-                        weight=cfg['focal_loss_weight'])
 
-    loss_func = CompoundLoss([cross_entropy_loss, dice_loss, focal_loss])
+
+    loss_func = CompoundLoss([cross_entropy_loss, dice_loss])
 
     return forward, loss_func
 
@@ -544,12 +517,7 @@ def get_pipeline_supervised_segmentation_no_phosphenes(cfg):
                         arg_names=('reconstruction', 'target'),
                         weight=cfg['dice_loss_weight'])
     
-    focal_loss = LossTerm(name='focal_loss',
-                        func=FocalLoss().to(cfg['device']),
-                        arg_names=('reconstruction', 'target'),
-                        weight=cfg['focal_loss_weight'])
-
-    loss_func = CompoundLoss([cross_entropy_loss, dice_loss, focal_loss])
+    loss_func = CompoundLoss([cross_entropy_loss, dice_loss])
 
     return forward, loss_func
 

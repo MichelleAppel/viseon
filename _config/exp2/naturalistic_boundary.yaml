@@ -41,7 +41,7 @@ training_pipeline:
 dataset:
     dataset: ADE20K # choose from ADE20K, BouncingMNIST
     target: 'boundary' # choose from 'segmentation', 'boundary'
-    data_directory : C:/Users/appel/Documents/Project/Dynaphos/data/michelle123_5658b6fb/ADE20K/
+    data_directory : ../data/ADE20K
     load_preprocessed: True # for the ADE50k dataset:
     debug_subset: 100 # for the ADE50k dataset:
     sequence_length: 5 # for the BouncingMNIST dataset:
