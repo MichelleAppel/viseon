@@ -8,7 +8,7 @@ general:
     gpu : 0
     save_path : ./out/faces/
     project_name: 'viseon'
-    run_name: 'face segmentation phosphenes - snellius'
+    run_name: 'face segmentation phosphenes'
     entity: 'michelleappel'
     model_log_freq: 16
     save_output: [input, stimulation, phosphenes, reconstruction_rgb, label_rgb]
