@@ -3,7 +3,7 @@ Description:
 
 general: 
     use_deterministic_algorithms: False
-    batch_size: 2
+    batch_size: 8
     device: 'cuda:0' 
     gpu : 0
     save_path : ./out/faces_unsupervised/
