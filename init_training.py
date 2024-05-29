@@ -201,7 +201,7 @@ def get_logging(cfg):
 def get_training_pipeline(cfg):
     if cfg['pipeline'] == 'unsupervised-segmentation':
         forward, lossfunc = get_pipeline_unsupervised_segmentation(cfg)
-    if cfg['pipeline'] == 'supervised-segmentation':
+    elif cfg['pipeline'] == 'supervised-segmentation':
         forward, lossfunc = get_pipeline_supervised_segmentation(cfg)
     elif cfg['pipeline'] == 'segmentation-latent':
         forward, lossfunc = get_pipeline_segmentation_latent(cfg)
