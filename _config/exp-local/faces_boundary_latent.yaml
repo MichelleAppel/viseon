@@ -1,0 +1,50 @@
+Description:
+    model_name: faces_boundary_latent
+
+general: 
+    use_deterministic_algorithms: False
+    batch_size: 8
+    device: 'cuda:0' 
+    gpu : 0
+    save_path : ./out/faces_boundary_latent/
+    project_name: 'viseon'
+    run_name: 'face segmentation latent phosphenes - local'
+    entity: 'michelleappel'
+    model_log_freq: 16
+    save_output: [input, phosphenes, reconstruction_rgb, target_rgb]
+    
+e2e_models:
+    model_architecture: end-to-end-autoencoder-nophosphenes # choose from end-to-end-autoencoder, zhao-autoencoder
+    in_channels: 3
+    n_electrodes: 1000
+    output_scaling: 256
+    output_steps: 16 # output is constrained to 10 possible steps in the range [0, output_scaling]
+    out_channels: 1
+    encoder_out_activation: sigmoid
+    decoder_out_activation: sigmoid
+
+optimization:
+    learning_rate: 0.0001
+    epochs: 28
+    trainstats_per_epoch: 24
+    validations_per_epoch: 8
+    early_stop_criterium: 15
+    alpha: 0.5
+    epsilon: 1
+    weight_decay: 0.000001
+    lr_patience: 12
+    lr_factor: 0.1
+    dice_loss_weight: 0.5
+    cross_entropy_loss_weight: 0.5
+    regularization_weight: 0
+
+training_pipeline:
+    pipeline: boundary-latent
+    
+dataset:
+    dataset: LaPa # choose from ADE20K, BouncingMNIST, LaPa
+    target: ['boundary'] # choose from 'semantic', 'boundary'
+    num_classes: 11
+    data_directory : ../data/face/LaPa
+    debug_subset: False
+    circular_mask: True

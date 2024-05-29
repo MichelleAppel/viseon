@@ -67,8 +67,18 @@ def get_character_dataset(cfg):
     return trainset, valset
 
 def get_lapa_dataset(cfg):
-    trainset = LaPaDataset(directory=cfg['data_directory'], device=cfg['device'], validation=False, circular_mask=cfg['circular_mask'])
-    valset = LaPaDataset(directory=cfg['data_directory'], device=cfg['device'], validation=True, circular_mask=cfg['circular_mask'])
+    trainset = LaPaDataset(directory=cfg['data_directory'], 
+                           device=cfg['device'],
+                           semantic_labels='semantic' in cfg['target'],
+                           contour_labels='boundary' in cfg['target'],
+                           validation=False, 
+                           circular_mask=cfg['circular_mask'])
+    valset = LaPaDataset(directory=cfg['data_directory'], 
+                         device=cfg['device'], 
+                         semantic_labels='semantic' in cfg['target'],
+                         contour_labels='boundary' in cfg['target'], 
+                         validation=True, 
+                         circular_mask=cfg['circular_mask'])
     return trainset, valset
 
 def create_circular_mask(h, w, center=None, radius=None, circular_mask=True):
@@ -411,12 +421,12 @@ class Character_Dataset(Dataset):
 
         return img.to(self.device), lbl.to(self.device)
 
-
 class LaPaDataset(Dataset):
     def __init__(self, directory, 
                 device=torch.device('cuda:0'), 
                 imsize=(128, 128),
                 grayscale=False,
+                semantic_labels=False,
                 contour_labels=False, 
                 validation=False,
                 circular_mask=True,
@@ -425,6 +435,7 @@ class LaPaDataset(Dataset):
         self.device = device
         self.imsize = imsize
         self.grayscale = grayscale
+        self.semantic_labels = semantic_labels
         self.contour_labels = contour_labels
         self.validation = validation
         self.debug_subset = debug_subset
@@ -449,22 +460,23 @@ class LaPaDataset(Dataset):
                                 T.ToTensor()
                                 ])
 
-        if self.contour_labels:
-            # Transformation for target with contour detection
-            contour = lambda im: im.filter(ImageFilter.FIND_EDGES).point(lambda p: p > 1 and 255) if self.contour_labels else im
-            self.trg_transform = T.Compose([T.Lambda(lambda img:F.center_crop(img, min(img.size))),
-                                            T.Resize(imsize,interpolation=T.InterpolationMode.NEAREST), # Nearest Neighbour
-                                            T.Lambda(contour),
-                                            T.ToTensor()
-                                            ])
-        else:
-            # Transformation for target with semantic labels
-            self.trg_transform = T.Compose([
+        # Transformation for target with semantic labels
+        if self.semantic_labels:
+            self.semantic_transform = T.Compose([
                                             T.Lambda(lambda img: F.center_crop(img, min(img.size))),
                                             T.Resize(imsize, interpolation=T.InterpolationMode.NEAREST), # Nearest Neighbour is typically used for segmentation labels to avoid interpolation artifacts
                                             T.Lambda(lambda img: torch.from_numpy(np.array(img)).long()) # For masks
                                         ])
 
+        if self.contour_labels:
+            # Transformation for target with contour detection
+            contour = lambda im: im.filter(ImageFilter.FIND_EDGES).point(lambda p: p > 1 and 255) if self.contour_labels else im
+            self.contour_transform = T.Compose([
+                                            T.Lambda(lambda img:F.center_crop(img, min(img.size))),
+                                            T.Resize(imsize,interpolation=T.InterpolationMode.NEAREST),
+                                            T.Lambda(contour),
+                                            T.ToTensor()
+                                        ])
 
         if circular_mask:
             self._mask = create_circular_mask(*imsize).view(1, *imsize)
@@ -478,14 +490,32 @@ class LaPaDataset(Dataset):
     def __getitem__(self, idx):
         # Load image and label
         image = Image.open(self.image_paths[idx]).convert('RGB')
-        label = Image.open(self.label_paths[idx]).convert('L')  # Assuming labels are grayscale
+        label = Image.open(self.label_paths[idx]).convert('L') 
 
         # Apply transformations
         image = self.img_transform(image)
-        label = self.trg_transform(label)
+        if self.semantic_labels:
+            semantic = self.semantic_transform(label)
+        else:
+            semantic = None
+
+        if self.contour_labels:
+            contour = self.contour_transform(label)
+        else:    
+            contour = None
 
         if self._mask is not None:
             image = image * self._mask
-            label = label * self._mask
+            if semantic is not None:
+                semantic = semantic * self._mask
+            if contour is not None:
+                contour = contour * self._mask
 
-        return image.to(self.device), label.to(self.device)
+        # Dictionary containing image, label and contours
+        batch = {'image': image.to(self.device)} 
+        if self.semantic_labels:
+            batch['segmentation_maps'] = semantic.to(self.device)
+        if self.contour_labels:
+            batch['contour'] = contour.to(self.device)
+
+        return batch
