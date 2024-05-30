@@ -1,24 +1,28 @@
 Description:
-    model_name: faces_boundary_latent
+    model_name: faces_unsupervised_phosphenes_boundary
 
 general: 
     use_deterministic_algorithms: False
     batch_size: 8
     device: 'cuda:0' 
     gpu : 0
-    save_path : ./out/faces_boundary_latent/
+    save_path : ./out/faces_unsupervised_phosphenes_boundary/
     project_name: 'viseon'
-    run_name: 'face segmentation latent phosphenes - snellius'
+    run_name: 'unsupervised_phosphenes_boundary - snellius'
     entity: 'michelleappel'
     model_log_freq: 16
-    save_output: [input, phosphenes, reconstruction_rgb, target_rgb]
+    save_output: [input, stimulation, phosphenes, reconstruction_rgb, target_rgb]
+    
+simulator:
+    base_config: ./_config/exp-local/simulator_config.yaml
+    phosphene_map: ./_config/phosphene_maps/DefaultCoordinateMap_1000_phosphenes.pickle
     
 e2e_models:
-    model_architecture: end-to-end-autoencoder-nophosphenes # choose from end-to-end-autoencoder, zhao-autoencoder
+    model_architecture: end-to-end-autoencoder # choose from end-to-end-autoencoder, zhao-autoencoder
     in_channels: 3
     n_electrodes: 1000
-    output_scaling: 256
-    output_steps: 16 # output is constrained to 10 possible steps in the range [0, output_scaling]
+    output_scaling: 128.0e-6
+    output_steps: 10 # output is constrained to 10 possible steps in the range [0, output_scaling]
     out_channels: 1
     encoder_out_activation: sigmoid
     decoder_out_activation: sigmoid
@@ -39,8 +43,8 @@ optimization:
     regularization_weight: 0
 
 training_pipeline:
-    pipeline: boundary-latent
-    
+    pipeline: unsupervised-boundary
+
 dataset:
     dataset: LaPa # choose from ADE20K, BouncingMNIST, LaPa
     target: ['boundary'] # choose from 'semantic', 'boundary'

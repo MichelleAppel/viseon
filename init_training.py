@@ -260,7 +260,8 @@ def get_pipeline_supervised_segmentation(cfg):
         # Sample phosphenes and target at the centers of the phosphenes
         out.update({'phosphene_centers': simulator.sample_centers(phosphenes),
                     'input_centers': simulator.sample_centers(out['input_resized']),
-                    'target_centers': simulator.sample_centers(out['target_resized'])})
+                    # 'target_centers': simulator.sample_centers(out['target_resized'])
+                    })
 
         if to_cpu:
             # Return a cpu-copy of the model output
@@ -479,6 +480,7 @@ def get_pipeline_boundary_supervised_segmentation(cfg):
 
         # Data manipulation
         image, semantic_map, boundaries = batch['image'] , batch['segmentation_maps'], batch['contour']
+        boundaries = dilation3x3(boundaries)
         label_rgb = tensor_to_rgb(semantic_map, cfg['num_classes'])
         unstandardized_image = undo_standardize(image).mean(1, keepdims=True)
 

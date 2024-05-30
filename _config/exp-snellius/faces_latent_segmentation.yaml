@@ -1,14 +1,14 @@
 Description:
-    model_name: faces_latent
+    model_name: faces_latent_segmentation
 
 general: 
     use_deterministic_algorithms: False
     batch_size: 8
     device: 'cuda:0' 
     gpu: 0
-    save_path : ./out/faces_latent/
+    save_path : ./out/faces_latent_segmentation/
     project_name: 'viseon'
-    run_name: 'face segmentation latent - snellius'
+    run_name: 'latent_segmentation - snellius'
     entity: 'michelleappel'
     model_log_freq: 16
     save_output: [input, phosphenes, reconstruction_rgb, target_rgb]
@@ -43,7 +43,7 @@ training_pipeline:
 
 dataset:
     dataset: LaPa # choose from ADE20K, BouncingMNIST, LaPa
-    target: ['segmentation'] # choose from 'segmentation', 'boundary'
+    target: ['semantic'] # choose from 'segmentation', 'boundary'
     num_classes: 11
     data_directory : ../data/face/LaPa
     debug_subset: False

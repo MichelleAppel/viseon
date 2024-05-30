@@ -1,14 +1,14 @@
 Description:
-    model_name: faces_boundary_supervised_segmentation
+    model_name: faces_input_supervised_phosphenes_segmentation
 
 general: 
     use_deterministic_algorithms: False
     batch_size: 8
     device: 'cuda:0' 
     gpu : 0
-    save_path : ./out/faces_boundary_supervised_segmentation/
+    save_path : ./out/faces_input_supervised_phosphenes_segmentation/
     project_name: 'viseon'
-    run_name: 'face boundary supervised segmentation - snellius'
+    run_name: 'input_supervised_phosphenes_segmentation - snellius'
     entity: 'michelleappel'
     model_log_freq: 16
     save_output: [input, stimulation, phosphenes, reconstruction_rgb, target_rgb, target_resized]
@@ -18,7 +18,7 @@ simulator:
     phosphene_map: ./_config/phosphene_maps/DefaultCoordinateMap_1000_phosphenes.pickle
     
 e2e_models:
-    model_architecture: end-to-end-autoencoder # choose from end-to-end-autoencoder, zhao-autoencoder
+    model_architecture: end-to-end-autoencoder-nophosphenes # choose from end-to-end-autoencoder, end-to-end-autoencoder-nophosphenes, zhao-autoencoder
     in_channels: 3
     n_electrodes: 1000
     output_scaling: 128.0e-6
@@ -35,7 +35,7 @@ optimization:
     early_stop_criterium: 15
     alpha: 0.5
     epsilon: 1
-    class_weights: [1.45, 6.81, 457.75, 465.14, 776.28, 774.85, 89.99, 532.11, 520.07, 319.26, 7.14]
+    class_weights: [1.45, 6.81, 457.75, 465.14, 776.28, 774.85, 89.99, 532.11, 520.07, 319.26, 7.14] # no circle mask enforced in reconstruction
     weight_decay: 0.000001
     lr_patience: 12
     lr_factor: 0.1
@@ -44,11 +44,11 @@ optimization:
     regularization_weight: 0.5
 
 training_pipeline:
-    pipeline: boundary-supervised-segmentation
+    pipeline: supervised-segmentation
 
 dataset:
     dataset: LaPa # choose from ADE20K, BouncingMNIST, LaPa
-    target: ['boundary', 'semantic'] # choose from 'semantic', 'boundary'
+    target: ['semantic'] # choose from 'semantic', 'boundary'
     num_classes: 11
     data_directory : ../data/face/LaPa
     debug_subset: False
