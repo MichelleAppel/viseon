@@ -3,7 +3,7 @@ Description:
 
 general: 
     use_deterministic_algorithms: False
-    batch_size: 8
+    batch_size: 4
     device: 'cuda:0' 
     gpu : 0
     save_path : ./out/faces_input_supervised_phosphenes_segmentation/
@@ -18,7 +18,7 @@ simulator:
     phosphene_map: ./_config/phosphene_maps/DefaultCoordinateMap_1000_phosphenes.pickle
     
 e2e_models:
-    model_architecture: end-to-end-autoencoder-nophosphenes # choose from end-to-end-autoencoder, end-to-end-autoencoder-nophosphenes, zhao-autoencoder
+    model_architecture: end-to-end-autoencoder # choose from end-to-end-autoencoder, end-to-end-autoencoder-nophosphenes, zhao-autoencoder
     in_channels: 3
     n_electrodes: 1000
     output_scaling: 128.0e-6

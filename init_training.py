@@ -54,7 +54,7 @@ def get_models(cfg):
         raise NotImplementedError
 
     optimizer = torch.optim.Adam([*encoder.parameters(), *decoder.parameters()], lr=cfg['learning_rate'], weight_decay=cfg['weight_decay'])
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=cfg.get('lr_factor', 0.1), patience=cfg.get('lr_patience', 10), verbose=True)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=cfg.get('lr_factor', 0.1), patience=cfg.get('lr_patience', 10))
 
     if 'base_config' in cfg.keys():
         simulator = get_simulator(cfg)
@@ -199,7 +199,7 @@ def get_pipeline_unsupervised_segmentation(cfg):
                'stimulation': stimulation,
                'phosphenes': phosphenes,
                'reconstruction': reconstruction,
-               'target': (label * cfg['circular_mask']),
+               'target': (label * cfg['circular_mask']).squeeze(1),
                'target_resized': resize(label.float() * cfg['circular_mask'], cfg['SPVsize'],),
                'target_rgb': label_rgb,
                'reconstruction_rgb': reconstruction_rgb,
@@ -237,7 +237,7 @@ def get_pipeline_supervised_segmentation(cfg):
         # Data manipulation
         image, label = batch['image'] , batch['segmentation_maps']
         label_rgb = tensor_to_rgb(label, cfg['num_classes'])
-        unstandardized_image = undo_standardize(image).mean(1, keepdims=True)
+        unstandardized_image = image.mean(1, keepdims=True)/255.0
 
         # Forward pass
         simulator.reset()
@@ -246,16 +246,18 @@ def get_pipeline_supervised_segmentation(cfg):
         reconstruction = decoder(phosphenes) # * cfg['circular_mask']
         reconstruction_rgb = tensor_to_rgb(torch.nn.functional.softmax(reconstruction.detach(), dim=1).argmax(1, keepdims=True), cfg['num_classes'])
 
+        input_resized = resize(unstandardized_image * cfg['circular_mask'], cfg['SPVsize'])
+
         # Output dictionary
         out = {'input': image,
                'stimulation': stimulation,
                'phosphenes': phosphenes,
                'reconstruction': reconstruction,
                'target': (label * cfg['circular_mask']).squeeze(1),
-               'target_resized': resize(label.float() * cfg['circular_mask'], cfg['SPVsize'],),
+               'target_resized': input_resized,
                'target_rgb': label_rgb,
                'reconstruction_rgb': reconstruction_rgb,
-               'input_resized': resize(unstandardized_image * cfg['circular_mask'], cfg['SPVsize'])}
+               'input_resized': input_resized}
 
         # Sample phosphenes and target at the centers of the phosphenes
         out.update({'phosphene_centers': simulator.sample_centers(phosphenes),
