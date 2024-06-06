@@ -4,6 +4,11 @@ import torch.nn.functional as F
 import torchvision
 import math
 
+from components.DoG import DoGConv2DLayer, DoGConv2D
+from components.LocallyConnected2d import LocallyConnected2d
+from components.DivisiveNormalization import DivisiveNormalizationCirincione, OpponentChannelInhibition
+from components.PolarTransform import PolarTransform
+
 def get_e2e_autoencoder(cfg):
 
     # initialize encoder and decoder
@@ -45,15 +50,40 @@ def get_e2e_autoencoder_nophosphenes(cfg):
                                                   out_scaling=cfg['output_scaling'])).to(cfg['device'])
     return encoder, decoder
 
-def get_Zhao_autoencoder(cfg):
-    encoder = ZhaoEncoder(in_channels=cfg['in_channels'], n_electrodes=cfg['n_electrodes']).to(cfg['device'])
-    decoder = ZhaoDecoder(out_channels=cfg['out_channels'], out_activation=cfg['decoder_out_activation']).to(cfg['device'])
-
-    return encoder, decoder
+def get_bio_autoencoder(cfg):
+    
+        # initialize encoder and decoder
+        encoder = Bio_Encoder(in_channels=cfg['in_channels'],
+                            n_electrodes=cfg['n_electrodes'],
+                            out_scaling=cfg['output_scaling'],
+                            out_activation=cfg['encoder_out_activation']).to(cfg['device'])
+    
+        decoder = E2E_Decoder(out_channels=cfg['out_channels'],
+                          out_activation=cfg['decoder_out_activation']).to(cfg['device'])
+        
+        # If output steps are specified, add safety layer at the end of the encoder model 
+        if cfg['output_steps'] != 'None':
+            assert cfg['encoder_out_activation'] == 'sigmoid'
+            encoder.output_scaling = 1.0
+            encoder = torch.nn.Sequential(encoder,
+                                        SafetyLayer(n_steps=cfg['output_steps'],
+                                                    order=2,
+                                                    out_scaling=cfg['output_scaling'])).to(cfg['device'])
+        return encoder, decoder
 
 def convlayer(n_input, n_output, k_size=3, stride=1, padding=1, resample_out=None):
     layer = [
         nn.Conv2d(n_input, n_output, kernel_size=k_size, stride=stride, padding=padding, bias=False),
+        nn.BatchNorm2d(n_output),
+        nn.LeakyReLU(inplace=True),
+        resample_out]
+    if resample_out is None:
+        layer.pop()
+    return layer
+
+def bio_convlayer(n_input, n_output, k_size=3, stride=1, padding=1, resample_out=None):
+    layer = [
+        DoGConv2D(in_channels=n_input, out_channels=n_output, k=k_size, stride=stride, padding=padding),
         nn.BatchNorm2d(n_output),
         nn.LeakyReLU(inplace=True),
         resample_out]
@@ -90,6 +120,30 @@ class ResidualBlock(nn.Module):
         self.bn1 = nn.BatchNorm2d(n_channels)
         self.relu = nn.LeakyReLU(inplace=True)
         self.conv2 = nn.Conv2d(n_channels, n_channels,kernel_size=3, stride=1,padding=1)
+        self.bn2 = nn.BatchNorm2d(n_channels)
+        self.resample_out = resample_out
+
+    def forward(self, x):
+        residual = x
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out += residual
+        out = self.relu(out)
+        if self.resample_out:
+            out = self.resample_out(out)
+        return out
+    
+
+class BioResidualBlock(nn.Module):
+    def __init__(self, n_channels, stride=1, resample_out=None):
+        super(BioResidualBlock, self).__init__()
+        self.conv1 = DoGConv2D(in_channels=n_channels, out_channels=n_channels, k=3, stride=1, padding=3)
+        self.bn1 = nn.BatchNorm2d(n_channels)
+        self.relu = nn.LeakyReLU(inplace=True)
+        self.conv2 = DoGConv2D(n_channels, n_channels, k=3, stride=1, padding=3)
         self.bn2 = nn.BatchNorm2d(n_channels)
         self.resample_out = resample_out
 
@@ -256,66 +310,46 @@ class E2E_Decoder(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-# class E2E_RealisticPhospheneSimulator(nn.Module):
-#     """A realistic simulator, using stimulation vectors to form a phosphene representation
-#     in: a 1024 length stimulation vector
-#     out: 256x256 phosphene representation
-#     """
-#     def __init__(self, cfg, params, r, phi):
-#         super(E2E_RealisticPhospheneSimulator, self).__init__()
-#         self.simulator = GaussianSimulator(params, r, phi, batch_size=cfg.batch_size, device=cfg.device)
-        
-#     def forward(self, stimulation):
-#         phosphenes = self.simulator(stim_amp=stimulation).clamp(0,1)
-#         phosphenes = phosphenes.view(phosphenes.shape[0], 1, phosphenes.shape[1], phosphenes.shape[2])
-#         return phosphenes
 
+class Bio_Encoder(nn.Module):
+    """
+    Encoder class that receives 128x128 input and outputs 32x32 feature map as stimulation protocol
+    with biologically inspired components.
+    """
+    def __init__(self, in_channels=3, out_channels=1, n_electrodes=638, out_scaling=1e-4, out_activation='relu'):
+        super(Bio_Encoder, self).__init__()
+        self.output_scaling = out_scaling
+        self.out_activation = {
+            'tanh': nn.Tanh(), 
+            'sigmoid': nn.Sigmoid(),
+            'relu': nn.ReLU(),
+            'softmax': nn.Softmax(dim=1)
+        }[out_activation]
 
-class ZhaoEncoder(nn.Module):
-    def __init__(self, in_channels=3,n_electrodes=638, out_channels=1):
-        super(ZhaoEncoder, self).__init__()
 
         self.model = nn.Sequential(
-            *convlayer3d(in_channels,32,3,1,1, resample_out=nn.MaxPool3d(2,(1,2,2),padding=(1,0,0),dilation=(2,1,1))),
-            *convlayer3d(32,48,3,1,1, resample_out=nn.MaxPool3d(2,(1,2,2),padding=(1,0,0),dilation=(2,1,1))),
-            *convlayer3d(48,64,3,1,1),
-            *convlayer3d(64,1,3,1,1),
-
-            nn.Flatten(start_dim=3),
-            nn.Linear(1024,n_electrodes),
-            nn.ReLU()
+            # *bio_convlayer(in_channels, 8, 3, 1, 1),
+            PolarTransform(input_h=128, input_w=128, output_h=128, output_w=128, radius_bins=[0, 8, 16, 24, 32], angle_bins=[0, 1.57, 3.14, 4.71, 6.28]),
+            # *bio_convlayer(8, 16, 3, 1, 1, resample_out=nn.MaxPool2d(2)),
+            # *bio_convlayer(16, 32, 3, 1, 1, resample_out=nn.MaxPool2d(2)),
+            # BioResidualBlock(32, resample_out=None),
+            # BioResidualBlock(32, resample_out=None),
+            # BioResidualBlock(32, resample_out=None),
+            # BioResidualBlock(32, resample_out=None),
+            # *bio_convlayer(32, 16, 3, 1, 1),
+            # PolarTransform(input_h=24, input_w=24, output_h=16, output_w=16, radius_bins=[0, 8, 16, 24, 32], angle_bins=[0, 1.57, 3.14, 4.71, 6.28]),
+            # DoGConv2D(16, 1, 3, 1, 1),
+            # nn.Flatten(),
+            # nn.Linear(400, n_electrodes),
+            # self.out_activation
         )
 
     def forward(self, x):
         self.out = self.model(x)
-        self.out = self.out.squeeze(dim=1)
-        self.out = self.out*1e-4
-        return self.out
+        stimulation = self.out * self.output_scaling  # scaling improves numerical stability
+        return stimulation
 
-class ZhaoDecoder(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1, out_activation='sigmoid'):
-        super(ZhaoDecoder, self).__init__()
-        
-        # Activation of output layer
-        self.out_activation = {'tanh': nn.Tanh(),
-                               'sigmoid': nn.Sigmoid(),
-                               'relu': nn.LeakyReLU(),
-                               'softmax':nn.Softmax(dim=1)}[out_activation]
 
-        self.model = nn.Sequential(
-            *convlayer3d(in_channels,16,3,1,1),
-            *convlayer3d(16,32,3,1,1),
-            *convlayer3d(32,64,3,(1,2,2),1),
-            *convlayer3d(64,32,3,1,1),
-            nn.Conv3d(32,out_channels,3,1,1),
-            self.out_activation
-        )
-
-    def forward(self, x):
-        self.out = self.model(x)
-        return self.out
-    
-    
 ### Exp 3 interaction models (Basic coactivation models)
 
 def ignore_inactive_electrodes(interaction_model, threshold=20e-6):

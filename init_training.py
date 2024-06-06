@@ -48,8 +48,8 @@ def get_models(cfg):
         encoder, decoder = model.get_e2e_autoencoder(cfg)
     elif cfg['model_architecture'] == 'end-to-end-autoencoder-nophosphenes':
         encoder, decoder = model.get_e2e_autoencoder_nophosphenes(cfg)
-    elif cfg['model_architecture'] == 'zhao-autoencoder':
-        encoder, decoder = model.get_Zhao_autoencoder(cfg)
+    elif cfg['model_architecture'] == 'bio-autoencoder':
+        encoder, decoder = model.get_bio_autoencoder(cfg)
     else:
         raise NotImplementedError
 

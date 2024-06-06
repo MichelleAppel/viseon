@@ -1,14 +1,14 @@
 Description:
-    model_name: faces_boundary_supervised
+    model_name: faces_boundary_supervised_phosphenes_boundary
 
 general: 
     use_deterministic_algorithms: False
     batch_size: 2
     device: 'cuda:0' 
     gpu : 0
-    save_path : ./out/faces_boundary_supervised/
+    save_path : ./out/faces_boundary_supervised_phosphenes_boundary/
     project_name: 'viseon'
-    run_name: 'face boundary supervised - local'
+    run_name: 'boundary_supervised_phosphenes_boundary - local'
     entity: 'michelleappel'
     model_log_freq: 16
     save_output: [input, stimulation, phosphenes, reconstruction_rgb, target_rgb, target_resized]

@@ -2,4 +2,4 @@ Experiments
 out
 __pycache__
 wandb
-notebooks/
+# notebooks/

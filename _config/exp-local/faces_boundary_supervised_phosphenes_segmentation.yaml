@@ -1,17 +1,17 @@
 Description:
-    model_name: faces_boundary_unsupervised
+    model_name: faces_boundary_supervised_phosphenes_segmentation
 
 general: 
     use_deterministic_algorithms: False
     batch_size: 2
     device: 'cuda:0' 
     gpu : 0
-    save_path : ./out/faces_boundary_unsupervised/
+    save_path : ./out/faces_boundary_supervised_phosphenes_segmentation/
     project_name: 'viseon'
-    run_name: 'face boundary unsupervised - local'
+    run_name: 'boundary_supervised_phosphenes_segmentation - local'
     entity: 'michelleappel'
     model_log_freq: 16
-    save_output: [input, stimulation, phosphenes, reconstruction_rgb, target_rgb]
+    save_output: [input, stimulation, phosphenes, reconstruction_rgb, target_rgb, target_resized]
     
 simulator:
     base_config: ./_config/exp-local/simulator_config.yaml
@@ -23,7 +23,7 @@ e2e_models:
     n_electrodes: 1000
     output_scaling: 128.0e-6
     output_steps: 10 # output is constrained to 10 possible steps in the range [0, output_scaling]
-    out_channels: 1
+    out_channels: 11
     encoder_out_activation: sigmoid
     decoder_out_activation: sigmoid
 
@@ -35,19 +35,20 @@ optimization:
     early_stop_criterium: 15
     alpha: 0.5
     epsilon: 1
+    class_weights: [1.45, 6.81, 457.75, 465.14, 776.28, 774.85, 89.99, 532.11, 520.07, 319.26, 7.14]
     weight_decay: 0.000001
     lr_patience: 12
     lr_factor: 0.1
-    dice_loss_weight: 0.5
-    cross_entropy_loss_weight: 0.5
-    regularization_weight: 0
+    dice_loss_weight: 0.25
+    cross_entropy_loss_weight: 0.25
+    regularization_weight: 0.5
 
 training_pipeline:
-    pipeline: unsupervised-boundary
-    
+    pipeline: boundary-supervised-segmentation
+
 dataset:
     dataset: LaPa # choose from ADE20K, BouncingMNIST, LaPa
-    target: ['boundary'] # choose from 'semantic', 'boundary'
+    target: ['boundary', 'semantic'] # choose from 'semantic', 'boundary'
     num_classes: 11
     data_directory : ../data/face/LaPa
     debug_subset: False

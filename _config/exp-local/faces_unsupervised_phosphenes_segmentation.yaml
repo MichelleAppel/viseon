@@ -1,24 +1,24 @@
 Description:
-    model_name: faces_segmentation_supervised
+    model_name: faces_unsupervised_phosphenes_segmentation
 
 general: 
     use_deterministic_algorithms: False
     batch_size: 2
     device: 'cuda:0' 
     gpu : 0
-    save_path : ./out/faces_boundary_latent/
+    save_path : ./out/faces_unsupervised_phosphenes_segmentation/
     project_name: 'viseon'
-    run_name: 'face boundary latent - local'
+    run_name: 'unsupervised_phosphenes_segmentations - local'
     entity: 'michelleappel'
     model_log_freq: 16
-    save_output: [input, stimulation, phosphenes, reconstruction_rgb, target_rgb, target_resized]
+    save_output: [input, stimulation, phosphenes, reconstruction_rgb, target_rgb]
     
 simulator:
     base_config: ./_config/exp-local/simulator_config.yaml
     phosphene_map: ./_config/phosphene_maps/DefaultCoordinateMap_1000_phosphenes.pickle
     
 e2e_models:
-    model_architecture: end-to-end-autoencoder-nophosphenes # choose from end-to-end-autoencoder, end-to-end-autoencoder-nophosphenes, zhao-autoencoder
+    model_architecture: end-to-end-autoencoder # choose from end-to-end-autoencoder, zhao-autoencoder
     in_channels: 3
     n_electrodes: 1000
     output_scaling: 128.0e-6
@@ -39,16 +39,16 @@ optimization:
     weight_decay: 0.000001
     lr_patience: 12
     lr_factor: 0.1
-    dice_loss_weight: 0.25
-    cross_entropy_loss_weight: 0.25
-    regularization_weight: 0.5
+    dice_loss_weight: 0.5
+    cross_entropy_loss_weight: 0.5
+    regularization_weight: 0
 
 training_pipeline:
-    pipeline: supervised-segmentation
+    pipeline: unsupervised-segmentation
 
 dataset:
     dataset: LaPa # choose from ADE20K, BouncingMNIST, LaPa
-    target: ['segmentation'] # choose from 'segmentation', 'boundary'
+    target: ['semantic'] # choose from 'segmentation', 'boundary'
     num_classes: 11
     data_directory : ../data/face/LaPa
     debug_subset: False

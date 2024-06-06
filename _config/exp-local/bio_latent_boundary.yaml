@@ -1,14 +1,14 @@
 Description:
-    model_name: faces_boundary_latent
+    model_name: faces_latent_boundary
 
 general: 
     use_deterministic_algorithms: False
-    batch_size: 8
+    batch_size: 2
     device: 'cuda:0' 
     gpu : 0
-    save_path : ./out/faces_boundary_latent/
+    save_path : ./out/faces_latent_boundary/
     project_name: 'viseon'
-    run_name: 'face segmentation latent phosphenes - local'
+    run_name: 'latent_boundary - local'
     entity: 'michelleappel'
     model_log_freq: 16
     save_output: [input, phosphenes, reconstruction_rgb, target_rgb]
