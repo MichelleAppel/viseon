@@ -268,8 +268,8 @@ class RetinalCompression:
                 # to the indices 4, and 5. The RGB values are weighted accordingly (0.7 for index 4, and 0.3 for index
                 # 5). Additionally, boundary checking is used. Values can never be smaller than 0, or larger than the
                 # maximum index of the image.
-                x = np.minimum(np.maximum([math.floor(y_n[i]), math.ceil(y_n[i])], 0), self.inS - 1)
-                y = np.minimum(np.maximum([math.floor(x_n[i]), math.ceil(x_n[i])], 0), self.inS - 1)
+                x = np.minimum(np.maximum([math.floor(np.real(y_n[i])), math.ceil(np.real(y_n[i]))], 0), self.inS - 1)
+                y = np.minimum(np.maximum([math.floor(np.real(x_n[i])), math.ceil(np.real(x_n[i]))], 0), self.inS - 1)
                 c, idx = np.unique([x[0] * self.inS + y, x[1] * self.inS + y], return_index=True)
                 dist = np.reshape(np.array([np.abs(x - x_n[i]), np.abs(y - y_n[i])]), 4)
                 W[i, c] = dist[idx] / sum(dist[idx])

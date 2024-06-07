@@ -53,7 +53,7 @@ def get_e2e_autoencoder_nophosphenes(cfg):
 def get_bio_autoencoder(cfg):
     
         # initialize encoder and decoder
-        encoder = Bio_Encoder(in_channels=cfg['in_channels'],
+        encoder = Retinal_Encoder(in_channels=cfg['in_channels'],
                             n_electrodes=cfg['n_electrodes'],
                             out_scaling=cfg['output_scaling'],
                             out_activation=cfg['encoder_out_activation']).to(cfg['device'])
@@ -71,6 +71,26 @@ def get_bio_autoencoder(cfg):
                                                     out_scaling=cfg['output_scaling'])).to(cfg['device'])
         return encoder, decoder
 
+def get_bio_autoencoder_nophosphenes(cfg):
+            # initialize encoder and decoder
+            encoder = Retinal_Encoder_nophosphenes(in_channels=cfg['in_channels'],
+                                out_scaling=cfg['output_scaling'],
+                                out_activation=cfg['encoder_out_activation']).to(cfg['device'])
+        
+            decoder = E2E_Decoder(out_channels=cfg['out_channels'],
+                            out_activation=cfg['decoder_out_activation']).to(cfg['device'])
+            
+            # If output steps are specified, add safety layer at the end of the encoder model 
+            if cfg['output_steps'] != 'None':
+                assert cfg['encoder_out_activation'] == 'sigmoid'
+                encoder.output_scaling = cfg['output_scaling']
+                encoder = torch.nn.Sequential(encoder,
+                                            SafetyLayer(n_steps=cfg['output_steps'],
+                                                        order=2,
+                                                        out_scaling=cfg['output_scaling'])).to(cfg['device'])
+            return encoder, decoder
+
+
 def convlayer(n_input, n_output, k_size=3, stride=1, padding=1, resample_out=None):
     layer = [
         nn.Conv2d(n_input, n_output, kernel_size=k_size, stride=stride, padding=padding, bias=False),
@@ -81,16 +101,15 @@ def convlayer(n_input, n_output, k_size=3, stride=1, padding=1, resample_out=Non
         layer.pop()
     return layer
 
-def bio_convlayer(n_input, n_output, k_size=3, stride=1, padding=1, resample_out=None):
+def retinalconvlayer(n_input, n_output, k_size=3, stride=1, padding=1, resample_out=None):
     layer = [
-        DoGConv2D(in_channels=n_input, out_channels=n_output, k=k_size, stride=stride, padding=padding),
-        nn.BatchNorm2d(n_output),
+        DoGConv2D(n_input, n_output, k=k_size, stride=stride, padding=padding),
+        OpponentChannelInhibition(n_channels=n_output),
         nn.LeakyReLU(inplace=True),
         resample_out]
     if resample_out is None:
         layer.pop()
     return layer
-
 
 def convlayer3d(n_input, n_output, k_size=3, stride=1, padding=1, resample_out=None):
     layer = [
@@ -136,24 +155,24 @@ class ResidualBlock(nn.Module):
             out = self.resample_out(out)
         return out
     
-
-class BioResidualBlock(nn.Module):
+class RetinalResidualBlock(nn.Module):
     def __init__(self, n_channels, stride=1, resample_out=None):
-        super(BioResidualBlock, self).__init__()
-        self.conv1 = DoGConv2D(in_channels=n_channels, out_channels=n_channels, k=3, stride=1, padding=3)
-        self.bn1 = nn.BatchNorm2d(n_channels)
+        super(RetinalResidualBlock, self).__init__()
+        # Dog layer
+        self.dogconv1 = DoGConv2D(n_channels, n_channels, k=3, stride=stride, padding=1)
+        self.divnorm1 = OpponentChannelInhibition(n_channels)
         self.relu = nn.LeakyReLU(inplace=True)
-        self.conv2 = DoGConv2D(n_channels, n_channels, k=3, stride=1, padding=3)
-        self.bn2 = nn.BatchNorm2d(n_channels)
+        self.dogconv2 = DoGConv2D(n_channels, n_channels, k=3, stride=stride, padding=1)
+        self.oppinhibition1 = OpponentChannelInhibition(n_channels)
         self.resample_out = resample_out
 
     def forward(self, x):
         residual = x
-        out = self.conv1(x)
-        out = self.bn1(out)
+        out = self.dogconv1(x)
+        out = self.divnorm1(out)
         out = self.relu(out)
-        out = self.conv2(out)
-        out = self.bn2(out)
+        out = self.dogconv2(out)
+        out = self.oppinhibition1(out)
         out += residual
         out = self.relu(out)
         if self.resample_out:
@@ -214,7 +233,79 @@ class VGGFeatureExtractor():
         
         return activations
         
-        
+
+class Retinal_Encoder(nn.Module):
+    """
+    Retinal inspired encoder.
+    in: (128x128) SVP representation
+    out: (1024) Stimulation protocol
+    """
+    def __init__(self, in_channels=3, out_channels=1, n_electrodes=1024, out_scaling=1e-4, out_activation='relu'):
+        super(Retinal_Encoder, self).__init__()
+        self.output_scaling = out_scaling
+        self.out_activation = {'tanh': nn.Tanh(), ## NOTE: simulator expects only positive stimulation values 
+                               'sigmoid': nn.Sigmoid(),
+                               'relu': nn.ReLU(),
+                               'softmax':nn.Softmax(dim=1)}[out_activation]
+
+        # Model
+        self.model = nn.Sequential(
+                                *retinalconvlayer(in_channels, 8, 3, 1, 1),
+                                *retinalconvlayer(8, 16, 3, 1, 1, resample_out=nn.MaxPool2d(2)),  # Output is 64x64
+                                *retinalconvlayer(16, 32, 3, 1, 1, resample_out=nn.MaxPool2d(2)),  # Output is 32x32
+                                RetinalResidualBlock(32),
+                                RetinalResidualBlock(32),
+                                RetinalResidualBlock(32),
+                                RetinalResidualBlock(32),
+                                *retinalconvlayer(32,16,3,1,1),
+                                DoGConv2D(16,1,3,1,1),
+                                LocallyConnected2d(32, n_electrodes, output_size=1, kernel_size=3, stride=1, padding=1),
+                                nn.Flatten(),
+                                self.out_activation)
+
+    def forward(self, x):
+        self.out = self.model(x)
+        stimulation = self.out*self.output_scaling #scaling improves numerical stability
+        return stimulation
+
+
+class Retinal_Encoder_nophosphenes(nn.Module):
+    """
+    Retinal inspired encoder.
+    in: (128x128) SVP representation
+    out: (256x256) Stimulation protocol
+    """
+    def __init__(self, in_channels=3, out_channels=1, out_scaling=1e-4, out_activation='relu'):
+        super(Retinal_Encoder_nophosphenes, self).__init__()
+        self.output_scaling = out_scaling
+        self.out_activation = {'tanh': nn.Tanh(),
+                               'sigmoid': nn.Sigmoid(),
+                               'relu': nn.ReLU(),
+                               'softmax': nn.Softmax(dim=1)}[out_activation]
+
+        # Model
+        self.model = nn.Sequential(
+            *retinalconvlayer(in_channels, 8, 3, 1, 1),
+            *retinalconvlayer(8, 16, 3, 1, 1, resample_out=nn.MaxPool2d(2)),  # Output is 64x64
+            *retinalconvlayer(16, 32, 3, 1, 1, resample_out=nn.MaxPool2d(2)),  # Output is 32x32
+            RetinalResidualBlock(32),
+            RetinalResidualBlock(32),
+            RetinalResidualBlock(32),
+            RetinalResidualBlock(32),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),  # Upsample to 64x64
+            *retinalconvlayer(32, 16, 3, 1, 1),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),  # Upsample to 128x128
+            *retinalconvlayer(16, out_channels, 3, 1, 1),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),  # Upsample to 256x256
+            self.out_activation
+        )
+
+    def forward(self, x):
+        x = self.model(x)
+        # x = x * self.output_scaling  # Scaling to improve numerical stability
+        return x
+
+
 class E2E_Encoder(nn.Module):
     """
     Simple non-generic encoder class that receives 128x128 input and outputs 32x32 feature map as stimulation protocol
@@ -309,45 +400,6 @@ class E2E_Decoder(nn.Module):
 
     def forward(self, x):
         return self.model(x)
-
-
-class Bio_Encoder(nn.Module):
-    """
-    Encoder class that receives 128x128 input and outputs 32x32 feature map as stimulation protocol
-    with biologically inspired components.
-    """
-    def __init__(self, in_channels=3, out_channels=1, n_electrodes=638, out_scaling=1e-4, out_activation='relu'):
-        super(Bio_Encoder, self).__init__()
-        self.output_scaling = out_scaling
-        self.out_activation = {
-            'tanh': nn.Tanh(), 
-            'sigmoid': nn.Sigmoid(),
-            'relu': nn.ReLU(),
-            'softmax': nn.Softmax(dim=1)
-        }[out_activation]
-
-
-        self.model = nn.Sequential(
-            # *bio_convlayer(in_channels, 8, 3, 1, 1),
-            PolarTransform(input_h=128, input_w=128, output_h=128, output_w=128, radius_bins=[0, 8, 16, 24, 32], angle_bins=[0, 1.57, 3.14, 4.71, 6.28]),
-            # *bio_convlayer(8, 16, 3, 1, 1, resample_out=nn.MaxPool2d(2)),
-            # *bio_convlayer(16, 32, 3, 1, 1, resample_out=nn.MaxPool2d(2)),
-            # BioResidualBlock(32, resample_out=None),
-            # BioResidualBlock(32, resample_out=None),
-            # BioResidualBlock(32, resample_out=None),
-            # BioResidualBlock(32, resample_out=None),
-            # *bio_convlayer(32, 16, 3, 1, 1),
-            # PolarTransform(input_h=24, input_w=24, output_h=16, output_w=16, radius_bins=[0, 8, 16, 24, 32], angle_bins=[0, 1.57, 3.14, 4.71, 6.28]),
-            # DoGConv2D(16, 1, 3, 1, 1),
-            # nn.Flatten(),
-            # nn.Linear(400, n_electrodes),
-            # self.out_activation
-        )
-
-    def forward(self, x):
-        self.out = self.model(x)
-        stimulation = self.out * self.output_scaling  # scaling improves numerical stability
-        return stimulation
 
 
 ### Exp 3 interaction models (Basic coactivation models)
