@@ -52,3 +52,4 @@ dataset:
     data_directory : ../data/face/LaPa
     debug_subset: False
     circular_mask: True
+    retinal_compression: True

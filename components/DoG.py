@@ -43,19 +43,16 @@ class DoGConv2D(nn.Module):
             self.bias = nn.Parameter(torch.randn(self.out_channels))
         else:
             self.bias = nn.Parameter(torch.zeros(self.out_channels), requires_grad=False)
-
-        self.kernels = None
         
 
     def forward(self, x):
-        if self.kernels is None:
-            sigma1 = torch.clamp(self.sigma1, min=0.1)
-            excite_component = (1/torch.pi*sigma1)*torch.exp(-1*self.kernel_dists/sigma1)
-            sigma2 = sigma1 * torch.clamp(self.sigma2_scale, min=1+1e-4)
-            inhibit_component = (1/torch.pi*sigma2)*torch.exp(-1*self.kernel_dists/torch.clamp(sigma2, min=1e-6))
-            self.kernels = (excite_component - inhibit_component)*self.total_scale*-1.0
-            self.kernels = torch.nn.functional.normalize(self.kernels, dim=0)
-            self.kernels = self.kernels.view(self.out_channels, self.in_channels, self.kernel_size, self.kernel_size)
+        sigma1 = torch.clamp(self.sigma1, min=0.1)
+        excite_component = (1/torch.pi*sigma1)*torch.exp(-1*self.kernel_dists/sigma1)
+        sigma2 = sigma1 * torch.clamp(self.sigma2_scale, min=1+1e-4)
+        inhibit_component = (1/torch.pi*sigma2)*torch.exp(-1*self.kernel_dists/torch.clamp(sigma2, min=1e-6))
+        self.kernels = (excite_component - inhibit_component)*self.total_scale*-1.0
+        self.kernels = torch.nn.functional.normalize(self.kernels, dim=0)
+        self.kernels = self.kernels.view(self.out_channels, self.in_channels, self.kernel_size, self.kernel_size)
 
         return nn.functional.conv2d(x, self.kernels, self.bias, stride=self.stride, padding=self.padding, dilation=self.dilation, groups=self.groups)
 

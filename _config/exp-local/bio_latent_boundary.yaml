@@ -6,15 +6,15 @@ general:
     batch_size: 2
     device: 'cuda:0' 
     gpu : 0
-    save_path : ./out/faces_latent_boundary/
+    save_path : ./out/io_latent_boundary/
     project_name: 'viseon'
-    run_name: 'latent_boundary - local'
+    run_name: 'bio_latent_boundary - local'
     entity: 'michelleappel'
     model_log_freq: 16
     save_output: [input, phosphenes, reconstruction_rgb, target_rgb]
     
 e2e_models:
-    model_architecture: end-to-end-autoencoder-nophosphenes # choose from end-to-end-autoencoder, zhao-autoencoder
+    model_architecture: bio-autoencoder-nophosphenes # choose from end-to-end-autoencoder, end-to-end-autoencoder-nophosphenes, bio-autoencoder, bio-autoencoder-nophosphenes
     in_channels: 3
     n_electrodes: 1000
     output_scaling: 256
@@ -48,3 +48,4 @@ dataset:
     data_directory : ../data/face/LaPa
     debug_subset: False
     circular_mask: True
+    retinal_compression: False

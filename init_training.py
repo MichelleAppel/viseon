@@ -13,14 +13,10 @@ from utils import resize, tensor_to_rgb, undo_standardize, dilation3x3, CustomSu
 from losses import LossTerm, CompoundLoss, RunningLoss, DiceLoss
 
 def get_dataset(cfg):
-    if cfg['dataset'] == 'ADE20K':
-        trainset, valset = local_datasets.get_ade20k_dataset(cfg)
-    elif cfg['dataset'] == 'BouncingMNIST':
-        trainset, valset = local_datasets.get_bouncing_mnist_dataset(cfg)
-    elif cfg['dataset'] == 'Characters':
-        trainset, valset = local_datasets.get_character_dataset(cfg)
-    elif cfg['dataset'] == 'LaPa':
+    if cfg['dataset'] == 'LaPa':
         trainset, valset = local_datasets.get_lapa_dataset(cfg)
+    else:
+        raise NotImplementedError
     
     if cfg['circular_mask'] is not False:
         cfg['circular_mask'] = trainset._mask.to(cfg['device'])
@@ -50,6 +46,8 @@ def get_models(cfg):
         encoder, decoder = model.get_e2e_autoencoder_nophosphenes(cfg)
     elif cfg['model_architecture'] == 'bio-autoencoder':
         encoder, decoder = model.get_bio_autoencoder(cfg)
+    elif cfg['model_architecture'] == 'bio-autoencoder-nophosphenes':
+        encoder, decoder = model.get_bio_autoencoder_nophosphenes(cfg)
     else:
         raise NotImplementedError
 

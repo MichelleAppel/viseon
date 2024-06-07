@@ -104,7 +104,8 @@ def convlayer(n_input, n_output, k_size=3, stride=1, padding=1, resample_out=Non
 def retinalconvlayer(n_input, n_output, k_size=3, stride=1, padding=1, resample_out=None):
     layer = [
         DoGConv2D(n_input, n_output, k=k_size, stride=stride, padding=padding),
-        OpponentChannelInhibition(n_channels=n_output),
+        # OpponentChannelInhibition(n_channels=n_output),
+        nn.BatchNorm2d(n_output),
         nn.LeakyReLU(inplace=True),
         resample_out]
     if resample_out is None:
@@ -160,10 +161,12 @@ class RetinalResidualBlock(nn.Module):
         super(RetinalResidualBlock, self).__init__()
         # Dog layer
         self.dogconv1 = DoGConv2D(n_channels, n_channels, k=3, stride=stride, padding=1)
-        self.divnorm1 = OpponentChannelInhibition(n_channels)
+        # self.divnorm1 = OpponentChannelInhibition(n_channels)
+        self.divnorm1 = nn.BatchNorm2d(n_channels)
         self.relu = nn.LeakyReLU(inplace=True)
         self.dogconv2 = DoGConv2D(n_channels, n_channels, k=3, stride=stride, padding=1)
-        self.oppinhibition1 = OpponentChannelInhibition(n_channels)
+        # self.oppinhibition1 = OpponentChannelInhibition(n_channels)
+        self.oppinhibition1 = nn.BatchNorm2d(n_channels)
         self.resample_out = resample_out
 
     def forward(self, x):
@@ -240,7 +243,7 @@ class Retinal_Encoder(nn.Module):
     in: (128x128) SVP representation
     out: (1024) Stimulation protocol
     """
-    def __init__(self, in_channels=3, out_channels=1, n_electrodes=1024, out_scaling=1e-4, out_activation='relu'):
+    def __init__(self, in_channels=3, n_electrodes=1024, out_scaling=1e-4, out_activation='relu'):
         super(Retinal_Encoder, self).__init__()
         self.output_scaling = out_scaling
         self.out_activation = {'tanh': nn.Tanh(), ## NOTE: simulator expects only positive stimulation values 
@@ -302,7 +305,7 @@ class Retinal_Encoder_nophosphenes(nn.Module):
 
     def forward(self, x):
         x = self.model(x)
-        # x = x * self.output_scaling  # Scaling to improve numerical stability
+        x = x * self.output_scaling  # Scaling to improve numerical stability
         return x
 
 
