@@ -11,20 +11,8 @@ from PIL import Image, ImageFilter
 
 
 def get_lapa_dataset(cfg):
-    trainset = LaPaDataset(directory=cfg['data_directory'], 
-                           device=cfg['device'],
-                           semantic_labels='semantic' in cfg['target'],
-                           contour_labels='boundary' in cfg['target'],
-                           validation=False, 
-                           circular_mask=cfg['circular_mask'],
-                           retinal_compression=cfg['retinal_compression'])
-    valset = LaPaDataset(directory=cfg['data_directory'], 
-                         device=cfg['device'], 
-                         semantic_labels='semantic' in cfg['target'],
-                         contour_labels='boundary' in cfg['target'], 
-                         validation=True, 
-                         circular_mask=cfg['circular_mask'],
-                         retinal_compression=cfg['retinal_compression'])
+    trainset = LaPaDataset(cfg, validation=False)
+    valset = LaPaDataset(cfg, validation=True)
     return trainset, valset
 
 def create_circular_mask(h, w, center=None, radius=None, circular_mask=True):
@@ -42,36 +30,29 @@ def create_circular_mask(h, w, center=None, radius=None, circular_mask=True):
     return mask
 
 class LaPaDataset(Dataset):
-    def __init__(self, directory, 
-                device=torch.device('cuda:0'), 
-                imsize=(128, 128),
-                grayscale=False,
-                semantic_labels=False,
-                contour_labels=False, 
-                validation=False,
-                circular_mask=True,
-                retinal_compression=False,
-                debug_subset=False):
-        self.directory = directory
-        self.device = device
-        self.imsize = imsize
-        self.grayscale = grayscale
-        self.semantic_labels = semantic_labels
-        self.contour_labels = contour_labels
+    def __init__(self, cfg, validation=False):
+        self.directory = cfg['data_directory']
+        self.device = cfg['device']
+        self.imsize = cfg['imsize']
+        self.grayscale = cfg['grayscale']
+        self.semantic_labels = 'semantic' in cfg['target']
+        self.contour_labels = 'boundary' in cfg['target']
         self.validation = validation
-        self.debug_subset = debug_subset
-        self.retinal_compression = retinal_compression
+        self.debug_subset = cfg['debug_subset']
+        self.retinal_compression = cfg['retinal_compression']
+        self.circular_mask = cfg['circular_mask']
+        self.fov = cfg['fov']
 
         # Define paths to images and labels
         image_folder = 'train' if not validation else 'val'
         label_folder = 'train' if not validation else 'val'
         
-        self.image_paths = glob(os.path.join(directory, image_folder, 'images', '*.jpg'))
-        self.label_paths = glob(os.path.join(directory, label_folder, 'labels', '*.png'))
+        self.image_paths = glob(os.path.join(self.directory, image_folder, 'images', '*.jpg'))
+        self.label_paths = glob(os.path.join(self.directory, label_folder, 'labels', '*.png'))
 
-        if debug_subset:
-            self.image_paths = self.image_paths[:debug_subset]
-            self.label_paths = self.label_paths[:debug_subset]
+        if self.debug_subset:
+            self.image_paths = self.image_paths[:self.debug_subset]
+            self.label_paths = self.label_paths[:self.debug_subset]
         
         # Sort to ensure alignment of images and labels
         self.image_paths.sort()
@@ -85,8 +66,8 @@ class LaPaDataset(Dataset):
                                         T.Lambda(lambda img:F.center_crop(img, min(img.size))),
                                         T.Resize((256, 256)),
                                         T.Lambda(lambda img: retinal_compression.single(image=np.array(img), 
-                                                                                 fov=16, 
-                                                                                 out_size=imsize[0], 
+                                                                                 fov=self.fov, 
+                                                                                 out_size=self.imsize[0], 
                                                                                  inv=0, 
                                                                                  type=0, 
                                                                                  show=0,
@@ -98,7 +79,7 @@ class LaPaDataset(Dataset):
         else:
             
             self.img_transform = T.Compose([T.Lambda(lambda img:F.center_crop(img, min(img.size))),
-                                    T.Resize(imsize),
+                                    T.Resize(self.imsize),
                                     T.ToTensor()
                                     ])
 
@@ -106,7 +87,7 @@ class LaPaDataset(Dataset):
         if self.semantic_labels:
             self.semantic_transform = T.Compose([
                                             T.Lambda(lambda img: F.center_crop(img, min(img.size))),
-                                            T.Resize(imsize, interpolation=T.InterpolationMode.NEAREST), # Nearest Neighbour is typically used for segmentation labels to avoid interpolation artifacts
+                                            T.Resize(self.imsize, interpolation=T.InterpolationMode.NEAREST), # Nearest Neighbour is typically used for segmentation labels to avoid interpolation artifacts
                                             T.Lambda(lambda img: torch.from_numpy(np.array(img)).long()) # For masks
                                         ])
 
@@ -115,13 +96,13 @@ class LaPaDataset(Dataset):
             contour = lambda im: im.filter(ImageFilter.FIND_EDGES).point(lambda p: p > 1 and 255) if self.contour_labels else im
             self.contour_transform = T.Compose([
                                             T.Lambda(lambda img:F.center_crop(img, min(img.size))),
-                                            T.Resize(imsize,interpolation=T.InterpolationMode.NEAREST),
+                                            T.Resize(self.imsize,interpolation=T.InterpolationMode.NEAREST),
                                             T.Lambda(contour),
                                             T.ToTensor()
                                         ])
 
-        if circular_mask:
-            self._mask = create_circular_mask(*imsize).view(1, *imsize)
+        if self.circular_mask:
+            self._mask = create_circular_mask(*self.imsize).view(1, *self.imsize)
         else:
             self._mask = None
 

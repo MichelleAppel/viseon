@@ -47,8 +47,11 @@ training_pipeline:
 
 dataset:
     dataset: LaPa # choose from ADE20K, BouncingMNIST, LaPa
+    imsize: [128, 128]
     target: ['boundary'] # choose from 'semantic', 'boundary'
     num_classes: 11
     data_directory : ../data/face/LaPa
     debug_subset: False
     circular_mask: True
+    grayscale: False
+    retinal_compression: True
