@@ -49,3 +49,4 @@ dataset:
     debug_subset: False
     load_preprocessed: True # for the ADE50k dataset:
     circular_mask: True
+    retinal_compression: True

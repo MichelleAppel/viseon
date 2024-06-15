@@ -4,7 +4,7 @@ Description:
 general: 
     use_deterministic_algorithms: False
     batch_size: 4
-    device: 'cuda:0' 
+    device: 'cpu' #'cuda:0' 
     gpu : 0
     save_path : ./out/faces_latent_boundary/
     project_name: 'viseon'
@@ -48,3 +48,4 @@ dataset:
     data_directory : ../data/face/LaPa
     debug_subset: False
     circular_mask: True
+    retinal_compression: True

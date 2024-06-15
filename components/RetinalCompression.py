@@ -259,7 +259,7 @@ class RetinalCompression:
             # The method used for image conversion. A sparse matrix that maps every pixel in the old image, to each
             # pixel in the new image via inverse mapping, is used.
             # Build a spare matrix for image conversion.
-            W = sparse((out_size ** 2, self.inS ** 2), dtype=np.float)
+            W = sparse((out_size ** 2, self.inS ** 2), dtype=float)
             # Sometimes division by 0 might happen. This line makes sure the user won't see a warning when this happens.
             np.seterr(divide='ignore', invalid='ignore')
             for i in range(out_size ** 2):
