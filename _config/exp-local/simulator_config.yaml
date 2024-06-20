@@ -10,7 +10,7 @@ run:
   dtype: float32
   use_gaussian_lut: False # Whether to approximate Gaussian activation with a
                           # look-up table.
-  batch_size: 0  # Set to zero when simulator is not used for computational optimization
+  batch_size: 4  # Set to zero when simulator is not used for computational optimization
 
 # display specs to accurately diplay sizes in dva
 display:

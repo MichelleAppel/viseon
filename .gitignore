@@ -3,3 +3,4 @@ out
 __pycache__
 wandb
 # notebooks/
+.ipynb_checkpoints/
