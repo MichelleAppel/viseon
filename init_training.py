@@ -1,16 +1,21 @@
-import torch
 import pickle
+
 import dynaphos
-from dynaphos.simulator import GaussianSimulator as PhospheneSimulator
-from torch.utils.data import Subset, DataLoader
-
-import wandb
-
-import model
 import local_datasets
+import model
+import torch
+import wandb
+from dynaphos.simulator import GaussianSimulator as PhospheneSimulator
+from losses import CompoundLoss, DiceLoss, LossTerm, RunningLoss
+from torch.utils.data import DataLoader, Subset
+from utils import (
+    CustomSummaryTracker,
+    dilation3x3,
+    resize,
+    tensor_to_rgb,
+    undo_standardize,
+)
 
-from utils import resize, tensor_to_rgb, undo_standardize, dilation3x3, CustomSummaryTracker
-from losses import LossTerm, CompoundLoss, RunningLoss, DiceLoss
 
 def get_dataset(cfg):
     if cfg['dataset'] == 'LaPa':
@@ -27,8 +32,8 @@ def get_dataset(cfg):
         trainset = Subset(trainset, indices=range(min(num_samples_debug, len(trainset))))
         valset = Subset(valset, indices=range(min(num_samples_debug, len(valset))))
 
-    trainloader = DataLoader(trainset, batch_size=cfg['batch_size'],shuffle=True, drop_last=True)
-    valloader = DataLoader(valset, batch_size=cfg['batch_size'],shuffle=False, drop_last=True)
+    trainloader = DataLoader(trainset, batch_size=cfg['batch_size'], shuffle=True, drop_last=True)
+    valloader = DataLoader(valset, batch_size=cfg['batch_size'], shuffle=False, drop_last=True)
     example_batch = next(iter(valloader))
 
     dataset = {'trainset': trainset,
