@@ -1,13 +1,12 @@
-import numpy as np
 import os
 from glob import glob
-import torch
 
-from torch.utils.data import Dataset
+import numpy as np
+import torch
 import torchvision.transforms as T
 import torchvision.transforms.functional as F
-
-from PIL import Image, ImageFilter 
+from PIL import Image, ImageFilter
+from torch.utils.data import Dataset
 
 
 def get_lapa_dataset(cfg):
@@ -64,7 +63,7 @@ class LaPaDataset(Dataset):
 
             self.img_transform = T.Compose([
                                         T.Lambda(lambda img:F.center_crop(img, min(img.size))),
-                                        T.Resize((256, 256)),
+                                        T.Resize((256, 256), interpolation=T.InterpolationMode.NEAREST), # should be here for the retinal compression
                                         T.Lambda(lambda img: retinal_compression.single(image=np.array(img), 
                                                                                  fov=self.fov, 
                                                                                  out_size=self.imsize[0], 
