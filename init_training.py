@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader, Subset
 from utils import (
     CustomSummaryTracker,
     dilation3x3,
+    FoveatedDilation,
     resize,
     tensor_to_rgb,
     undo_standardize,
@@ -105,22 +106,22 @@ def get_logging(cfg):
 ####### ADJUST OR ADD TRAINING PIPELINE BELOW
 
 def get_training_pipeline(cfg):
-    if cfg['pipeline'] == 'unsupervised-segmentation':
-        forward, lossfunc = get_pipeline_unsupervised_segmentation(cfg)
-    elif cfg['pipeline'] == 'supervised-segmentation':
-        forward, lossfunc = get_pipeline_supervised_segmentation(cfg)
+    if cfg['pipeline'] == 'unconstrained-segmentation':
+        forward, lossfunc = get_pipeline_unconstrained_segmentation(cfg)
+    elif cfg['pipeline'] == 'constrained-segmentation':
+        forward, lossfunc = get_pipeline_constrained_segmentation(cfg)
     elif cfg['pipeline'] == 'segmentation-latent':
         forward, lossfunc = get_pipeline_segmentation_latent(cfg)
     elif cfg['pipeline'] == 'boundary-latent':
         forward, lossfunc = get_pipeline_boundary_latent(cfg)
-    elif cfg['pipeline'] == 'unsupervised-boundary':
-        forward, lossfunc = get_pipeline_unsupervised_boundary(cfg)
-    elif cfg['pipeline'] == 'supervised-boundary':
-        forward, lossfunc = get_pipeline_supervised_boundary(cfg)
+    elif cfg['pipeline'] == 'unconstrained-boundary':
+        forward, lossfunc = get_pipeline_unconstrained_boundary(cfg)
+    elif cfg['pipeline'] == 'constrained-boundary':
+        forward, lossfunc = get_pipeline_constrained_boundary(cfg)
     elif cfg['pipeline'] == 'boundary-no-decoder':
         forward, lossfunc = get_pipeline_boundary_no_decoder(cfg)
-    elif cfg['pipeline'] == 'boundary-supervised-segmentation':
-        forward, lossfunc = get_pipeline_boundary_supervised_segmentation(cfg)
+    elif cfg['pipeline'] == 'boundary-constrained-segmentation':
+        forward, lossfunc = get_pipeline_boundary_constrained_segmentation(cfg)
     else:
         print(cfg['pipeline'] + 'not supported yet')
         raise NotImplementedError
@@ -177,7 +178,7 @@ def get_pipeline_segmentation_latent(cfg):
 
     return forward, loss_func
 
-def get_pipeline_unsupervised_segmentation(cfg):
+def get_pipeline_unconstrained_segmentation(cfg):
     def forward(batch, models, cfg, to_cpu=False):
         """Forward pass of the model."""
 
@@ -228,7 +229,7 @@ def get_pipeline_unsupervised_segmentation(cfg):
 
     return forward, loss_func
 
-def get_pipeline_supervised_segmentation(cfg):
+def get_pipeline_constrained_segmentation(cfg):
     def forward(batch, models, cfg, to_cpu=False):
         """Forward pass of the model."""
 
@@ -333,7 +334,9 @@ def get_pipeline_boundary_latent(cfg):
 
     return forward, loss_func
 
-def get_pipeline_unsupervised_boundary(cfg):
+def get_pipeline_unconstrained_boundary(cfg):
+    
+
     def forward(batch, models, cfg, to_cpu=False):
         """Forward pass of the model."""
 
@@ -374,7 +377,9 @@ def get_pipeline_unsupervised_boundary(cfg):
 
     return forward, loss_func
 
-def get_pipeline_supervised_boundary(cfg):
+def get_pipeline_constrained_boundary(cfg):
+    fov_dilation = FoveatedDilation(cfg['device'], sigma_min=0.1, sigma_max=5.0)
+
     def forward(batch, models, cfg, to_cpu=False):
         """Forward pass of the model."""
 
@@ -385,35 +390,50 @@ def get_pipeline_supervised_boundary(cfg):
 
         # Data manipulation
         image, label = batch['image'], batch['contour'] 
-        label = dilation3x3(label)
-        unstandardized_image = undo_standardize(image).mean(1, keepdims=True)
+        dilated_label = fov_dilation.apply(label)
 
         # Forward pass
-        simulator.reset()
         stimulation = encoder(image)
+        stimulation_square = stimulation.view(-1, 32, 32)
+
+        simulator.reset()
         phosphenes = simulator(stimulation).unsqueeze(1)
-        reconstruction = decoder(phosphenes) # * cfg['circular_mask']
+        simulator.reset()
+        phosphene_centers = simulator.sample_centers(phosphenes)
+
+        reconstruction = decoder(phosphenes)
+
+        simulator.reset()
+        target_stimulus = simulator.sample_stimulus(dilated_label.mean(1, keepdim=True)*cfg['output_scaling'])
+        target_stimulus_square = target_stimulus.view(-1, 32, 32)
+
+        simulator.reset()
+        target_centers = simulator.sample_centers(dilated_label.mean(1, keepdim=True))
+
+        simulator.reset()
+        target_phosphenes = simulator(target_stimulus).unsqueeze(1)
+
 
         # Output dictionary
-        out = {'input': image,
-               'stimulation': stimulation,
-               'phosphenes': phosphenes,
-               'reconstruction': reconstruction,
-               'target': label,
-               'target_resized': resize(label.float() * cfg['circular_mask'], cfg['SPVsize'],),
-               'target_rgb': label,
-               'reconstruction_rgb': reconstruction,
-               'input_resized': resize(unstandardized_image * cfg['circular_mask'], cfg['SPVsize'])}
-
-        # Sample phosphenes and target at the centers of the phosphenes
-        out.update({'phosphene_centers': simulator.sample_centers(phosphenes),
-                    # 'input_centers': simulator.sample_centers(out['input_resized']),
-                    'target_centers': simulator.sample_centers(out['target_resized'])})
+        out = { 'input': image,
+                'target': label,
+                'dilated_target': dilated_label,
+                'stimulation': stimulation,
+                'stimulation_square': stimulation_square.unsqueeze(1),
+                'phosphenes': phosphenes,
+                'phosphene_centers': phosphene_centers,
+                'target_stimulus': target_stimulus,
+                'target_stimulus_square': target_stimulus_square.unsqueeze(1),
+                'target_phosphenes': target_phosphenes,
+                'target_centers': target_centers,
+                'reconstruction': reconstruction
+               }
 
         if to_cpu:
             # Return a cpu-copy of the model output
             out = {k: v.detach().cpu().clone() for k, v in out.items()}
         return out
+
 
     recon_loss = LossTerm(name='reconstruction_loss',
                         func=torch.nn.MSELoss(),
@@ -421,9 +441,9 @@ def get_pipeline_supervised_boundary(cfg):
                         weight=1-cfg['regularization_weight'])
     
     regul_loss = LossTerm(name='regularization_loss',
-                          func=torch.nn.MSELoss(),
-                          arg_names=('phosphene_centers', 'target_centers'),
-                          weight=cfg['regularization_weight'])
+                        func=torch.nn.MSELoss(),
+                        arg_names=('phosphene_centers', 'target_centers'),
+                        weight=cfg['regularization_weight'])
 
     loss_func = CompoundLoss([recon_loss, regul_loss])
 
@@ -474,7 +494,7 @@ def get_pipeline_boundary_no_decoder(cfg):
 
     return forward, loss_func
 
-def get_pipeline_boundary_supervised_segmentation(cfg):
+def get_pipeline_boundary_constrained_segmentation(cfg):
     def forward(batch, models, cfg, to_cpu=False):
         """Forward pass of the model."""
 

@@ -2,8 +2,7 @@
 run:
   resolution: [256,256] #[width,height] in pixels
   view_angle: 16 #in degrees, horizontal view angle
-  origin: [0,0]
-  min_angle: 0.1 #in degrees, minimal eccentricity
+  origin: [0, 0]
   fps: 35
   gpu: 0 #if using cuda, enter gpu nr here (e.g. 0)
   print_stats: False #print simulator values for sanity check
@@ -11,7 +10,7 @@ run:
   dtype: float32
   use_gaussian_lut: False # Whether to approximate Gaussian activation with a
                           # look-up table.
-  batch_size: 0  # Set to zero when simulator is not used for computational optimization
+  batch_size: 1  # Set to zero when simulator is not used for computational optimization
 
 # display specs to accurately diplay sizes in dva
 display:
@@ -22,10 +21,18 @@ display:
 
 # for sampling from images/video
 sampling:
+  RF_size: 0.4 #mm cortex
+  use_relative_RF_size: True
+  filter: sobel #canny, sobel or none
+  T_high: 120 # in case of canny filtering: the high threshold
   sampling_method: receptive_fields #receptive_fields or center
-  RF_size: 0.5 # millimeters of cortical surface (when sampling receptive fields)
-  stimulus_scale: 1.e-4 # Only used when the sample_stimulus method is called with 'rescale=True'. The default behaviour
-                       # is no scaling (i.e., the stim amplitude equals the intensity of the sampled image).
+  receptive_fields:
+    threshold_low: 1e-5
+    threshold_high: 5e-5
+    stimulus_scale: 1e-4
+  center:
+    threshold: 1e-4
+    stimulus_scale: 8e-5
 
 # settings for electrode coords to visual field coords
 cortex_model:
@@ -59,7 +66,7 @@ brightness_saturation:
 
 # Stimulation threshold
 thresholding:
-  use_threshold: True
+  use_threshold: False
   rheobase: 23.9e-6 # The minimal current (Ampere) for infinite stimulation duration. Is used as the constant leak current.
   activation_threshold: 9.141886000943878e-08 # Threshold of tissue activation for the perception of phosphenes
   activation_threshold_sd: 6.715877869833961e-08 # Standard deviation of the tissue activation threshold (for random initialization)
@@ -67,7 +74,7 @@ thresholding:
 # Pulse width (pw), frequency (freq) default values, in case they aren't specified in the input
 default_stim:
   relative_stim_duration: 1 # range: [0-1]. stim_duration = rel_stim_dur * frame_duration
-  pw_default: 170.e-6 #Seconds
+  pw_default: 170.e-6 #microS
   freq_default: 300 #Hertz
 
 # Gabor filters

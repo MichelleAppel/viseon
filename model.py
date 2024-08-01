@@ -15,7 +15,8 @@ def get_e2e_autoencoder(cfg):
     encoder = E2E_Encoder(in_channels=cfg['in_channels'],
                           n_electrodes=cfg['n_electrodes'],
                           out_scaling=cfg['output_scaling'],
-                          out_activation=cfg['encoder_out_activation']).to(cfg['device'])
+                          out_activation=cfg['encoder_out_activation'],
+                          flattened_feature_size=cfg['flattened_feature_size']).to(cfg['device'])
 
     decoder = E2E_Decoder(out_channels=cfg['out_channels'],
                           out_activation=cfg['decoder_out_activation']).to(cfg['device'])
@@ -313,7 +314,7 @@ class E2E_Encoder(nn.Module):
     """
     Simple non-generic encoder class that receives 128x128 input and outputs 32x32 feature map as stimulation protocol
     """
-    def __init__(self, in_channels=3, out_channels=1, n_electrodes=638, out_scaling=1e-4, out_activation='relu'):
+    def __init__(self, in_channels=3, out_channels=1, n_electrodes=638, out_scaling=1e-4, out_activation='relu', flattened_feature_size=1024):
         super(E2E_Encoder, self).__init__()
         self.output_scaling = out_scaling
         self.out_activation = {'tanh': nn.Tanh(), ## NOTE: simulator expects only positive stimulation values 
@@ -332,7 +333,7 @@ class E2E_Encoder(nn.Module):
                                    *convlayer(32,16,3,1,1),
                                    nn.Conv2d(16,1,3,1,1),
                                    nn.Flatten(),
-                                   nn.Linear(1024,n_electrodes),
+                                   nn.Linear(flattened_feature_size, n_electrodes),
                                    self.out_activation)
 
     def forward(self, x):
@@ -392,7 +393,7 @@ class E2E_Decoder(nn.Module):
         # Model
         self.model = nn.Sequential(*convlayer(in_channels,16,3,1,1),
                                    *convlayer(16,32,3,1,1),
-                                   *convlayer(32,64,3,2,1),
+                                   *convlayer(32,64,3,1,1),
                                    ResidualBlock(64),
                                    ResidualBlock(64),
                                    ResidualBlock(64),

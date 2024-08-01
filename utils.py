@@ -8,6 +8,28 @@ import yaml
 
 import pickle
 
+from components.fov_conv2d_cont import FovConv2dCont
+
+
+class FoveatedDilation:
+    def __init__(self, device, kernel_type='gaussian_modulated', gaussian_kernel_size=15, sigma_min=0.01, sigma_max=5.0, sigma_function='exponential'):
+        self.device = device
+        self.net = FovConv2dCont(
+            in_channels=1,
+            out_channels=1,
+            kernel_size=1,
+            kernel_type=kernel_type,
+            gaussian_kernel_size=gaussian_kernel_size,
+            sigma_min=sigma_min,
+            sigma_max=sigma_max,
+            sigma_function=sigma_function
+        ).to(self.device)
+
+    def apply(self, img, threshold=0.01):
+        foa_xy = torch.tensor([[img.shape[-1] // 2, img.shape[-2] // 2]], dtype=torch.long).to(self.device)
+        foveated_batch = self.net(img, foa_xy)
+        thresholded = foveated_batch > threshold
+        return thresholded.float()
 
 # Dilation is used for the reg-loss on the phosphene image: phosphenes do not have to map 1 on 1, small offset is allowed.
 def dilation5x5(img, kernel=None):

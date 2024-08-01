@@ -1,0 +1,57 @@
+Description:
+    model_name: 128x128_constrained_boundary
+
+general: 
+    use_deterministic_algorithms: False
+    batch_size: 4
+    device: 'cuda:0' 
+    gpu : 0
+    save_path : ./out/128x128_constrained_boundary/
+    project_name: 'viseon_exp1'
+    run_name: '128x128_constrained_boundary'
+    entity: 'michelleappel'
+    model_log_freq: 16
+    save_output: [input, target, dilated_target, stimulation, stimulation_square, target_stimulus, target_stimulus_square, target_phosphenes, phosphenes, reconstruction]
+    
+simulator:
+    base_config: ./_config/exp1-snellius/simulator_config.yaml
+    phosphene_map: ./_config/phosphene_maps/DefaultCoordinateMap_1024_phosphenes.pickle
+
+e2e_models:
+    model_architecture: end-to-end-autoencoder # choose from end-to-end-autoencoder, zhao-autoencoder
+    in_channels: 3
+    n_electrodes: 1024
+    flattened_feature_size: 1024
+    output_scaling: 128.0e-6
+    output_steps: 10 # output is constrained to 10 possible steps in the range [0, output_scaling]
+    out_channels: 1
+    encoder_out_activation: sigmoid
+    decoder_out_activation: sigmoid
+
+optimization:
+    learning_rate: 0.001
+    epochs: 28
+    trainstats_per_epoch: 24
+    validations_per_epoch: 8
+    early_stop_criterium: 15
+    alpha: 0.5
+    epsilon: 1
+    weight_decay: 0.000001
+    lr_patience: 12
+    lr_factor: 0.1
+    regularization_weight: 0.9
+
+training_pipeline:
+    pipeline: constrained-boundary
+
+dataset:
+    dataset: LaPa # choose from ADE20K, BouncingMNIST, LaPa
+    num_classes: 11
+    target: ['boundary'] # choose from 'semantic', 'boundary'
+    data_directory : ../data/face/LaPa
+    debug_subset: False
+    grayscale: False
+    circular_mask: True
+    imsize: [128, 128]
+    retinal_compression: False
+    fov: 11.25

@@ -33,6 +33,7 @@ class LaPaDataset(Dataset):
         self.directory = cfg['data_directory']
         self.device = cfg['device']
         self.imsize = cfg['imsize']
+        self.contour_size = [256, 256]
         self.grayscale = cfg['grayscale']
         self.semantic_labels = 'semantic' in cfg['target']
         self.contour_labels = 'boundary' in cfg['target']
@@ -76,7 +77,6 @@ class LaPaDataset(Dataset):
                                         T.ToTensor()
                                     ])
         else:
-            
             self.img_transform = T.Compose([T.Lambda(lambda img:F.center_crop(img, min(img.size))),
                                     T.Resize(self.imsize),
                                     T.ToTensor()
@@ -86,7 +86,7 @@ class LaPaDataset(Dataset):
         if self.semantic_labels:
             self.semantic_transform = T.Compose([
                                             T.Lambda(lambda img: F.center_crop(img, min(img.size))),
-                                            T.Resize(self.imsize, interpolation=T.InterpolationMode.NEAREST), # Nearest Neighbour is typically used for segmentation labels to avoid interpolation artifacts
+                                            T.Resize(self.contour_size, interpolation=T.InterpolationMode.NEAREST), # Nearest Neighbour is typically used for segmentation labels to avoid interpolation artifacts
                                             T.Lambda(lambda img: torch.from_numpy(np.array(img)).long()) # For masks
                                         ])
 
@@ -95,13 +95,14 @@ class LaPaDataset(Dataset):
             contour = lambda im: im.filter(ImageFilter.FIND_EDGES).point(lambda p: p > 1 and 255) if self.contour_labels else im
             self.contour_transform = T.Compose([
                                             T.Lambda(lambda img:F.center_crop(img, min(img.size))),
-                                            T.Resize(self.imsize,interpolation=T.InterpolationMode.NEAREST),
+                                            T.Resize(self.contour_size, interpolation=T.InterpolationMode.NEAREST),
                                             T.Lambda(contour),
                                             T.ToTensor()
                                         ])
 
         if self.circular_mask:
             self._mask = create_circular_mask(*self.imsize).view(1, *self.imsize)
+            self._labelmask = create_circular_mask(*self.contour_size).view(1, *self.contour_size)
         else:
             self._mask = None
 
@@ -131,7 +132,7 @@ class LaPaDataset(Dataset):
             if semantic is not None:
                 semantic = semantic * self._mask
             if contour is not None:
-                contour = contour * self._mask
+                contour = contour * self._labelmask
 
         # Dictionary containing image, label and contours
         batch = {'image': image.to(self.device)} 
