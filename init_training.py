@@ -390,7 +390,8 @@ def get_pipeline_constrained_boundary(cfg):
 
         # Data manipulation
         image, label = batch['image'], batch['contour'] 
-        dilated_label = fov_dilation.apply(label)
+        # dilated_label = fov_dilation.apply(label)
+        dilated_label = dilation3x3(label)
 
         # Forward pass
         stimulation = encoder(image)
