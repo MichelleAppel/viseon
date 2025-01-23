@@ -2,8 +2,7 @@ import os
 import torch
 import numpy as np
 import pandas as pd
-import pickle
-from utils import resize, normalize, load_config, save_pickle, CustomSummaryTracker
+from utils import normalize, load_config, save_pickle, CustomSummaryTracker
 import init_training
 import argparse
 

@@ -4,3 +4,9 @@ __pycache__
 wandb
 # notebooks/
 .ipynb_checkpoints/
+_images/
+latex
+frames
+./behavioural_experiment_data
+behavioural_experiment_data_subset
+behavioural_experiment_data_testtrial

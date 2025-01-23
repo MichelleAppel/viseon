@@ -89,6 +89,22 @@ class DiceLoss(nn.Module):
 
         dice_score = (2. * intersection + self.smooth) / (union + self.smooth)
         return 1 - dice_score.mean()
+    
+class BinaryDiceLoss(nn.Module):
+    def __init__(self, smooth=1e-6):
+        super(BinaryDiceLoss, self).__init__()
+        self.smooth = smooth
+
+    def forward(self, prediction, target):
+        # Thresholding continuous values to binary (0 or 1) for Dice Loss
+        prediction = (prediction > 0.5).float()  # Convert predictions to binary
+        target = (target > 0.5).float()  # Ensure targets are also binary
+
+        intersection = (prediction * target).sum(dim=(2, 3))  # Sum over spatial dimensions
+        union = prediction.sum(dim=(2, 3)) + target.sum(dim=(2, 3))  # Union of predicted and target areas
+        dice = (2. * intersection + self.smooth) / (union + self.smooth)
+        return 1 - dice.mean()  # Dice loss is 1 - dice coefficient
+    
 
     
 

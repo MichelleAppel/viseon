@@ -16,7 +16,7 @@ from utils import (
     tensor_to_rgb,
     undo_standardize,
 )
-
+from segmentation_models_pytorch.losses import FocalLoss
 
 def get_dataset(cfg):
     if cfg['dataset'] == 'LaPa':
@@ -378,7 +378,7 @@ def get_pipeline_unconstrained_boundary(cfg):
     return forward, loss_func
 
 def get_pipeline_constrained_boundary(cfg):
-    fov_dilation = FoveatedDilation(cfg['device'], sigma_min=0.1, sigma_max=5.0)
+    # fov_dilation = FoveatedDilation(cfg['device'], sigma_min=0.1, sigma_max=5.0)
 
     def forward(batch, models, cfg, to_cpu=False):
         """Forward pass of the model."""
@@ -414,7 +414,6 @@ def get_pipeline_constrained_boundary(cfg):
         simulator.reset()
         target_phosphenes = simulator(target_stimulus).unsqueeze(1)
 
-
         # Output dictionary
         out = { 'input': image,
                 'target': label,
@@ -436,15 +435,22 @@ def get_pipeline_constrained_boundary(cfg):
         return out
 
 
-    recon_loss = LossTerm(name='reconstruction_loss',
-                        func=torch.nn.MSELoss(),
-                        arg_names=('reconstruction', 'target'),
-                        weight=1-cfg['regularization_weight'])
-    
+    # recon_loss = LossTerm(name='reconstruction_loss',
+    #                     func=torch.nn.MSELoss(),
+    #                     arg_names=('reconstruction', 'target'),
+    #                     weight=1-cfg['regularization_weight'])
+
+
     regul_loss = LossTerm(name='regularization_loss',
                         func=torch.nn.MSELoss(),
                         arg_names=('phosphene_centers', 'target_centers'),
                         weight=cfg['regularization_weight'])
+    
+    recon_loss = LossTerm(name='reconstruction_loss',
+                      func=torch.nn.MSELoss(),
+                      arg_names=('reconstruction', 'target'),
+                      weight=1 - cfg['regularization_weight'])
+    
 
     loss_func = CompoundLoss([recon_loss, regul_loss])
 

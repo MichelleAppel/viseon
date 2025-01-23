@@ -1,6 +1,6 @@
 # run settings
 run:
-  resolution: [256,256] #[width,height] in pixels
+  resolution: [400,400] #[width,height] in pixels
   view_angle: 16 #in degrees, horizontal view angle
   origin: [0,0]
   min_angle: 0.1 #in degrees, minimal eccentricity

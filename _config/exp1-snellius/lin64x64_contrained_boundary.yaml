@@ -22,7 +22,7 @@ e2e_models:
     in_channels: 3
     n_electrodes: 1024
     flattened_feature_size: 256
-    output_scaling: 128.0e-6
+    output_scaling: 256.0e-6
     output_steps: 10 # output is constrained to 10 possible steps in the range [0, output_scaling]
     out_channels: 1
     encoder_out_activation: sigmoid
@@ -54,4 +54,4 @@ dataset:
     circular_mask: True
     imsize: [64, 64]
     retinal_compression: False
-    fov: 11.25
+    fov: 7
